@@ -51,10 +51,11 @@ with tab0:
     st.dataframe(pd.DataFrame(rows), hide_index=True)
     st.info("Test app: a fake support bot with fake secrets, run on a small local model. Results describe this test set, not every LLM app.")
     with st.expander("Limitations"):
-        st.markdown("- Small attack set (about 120 attacks); a 0% result can still hide a rate of about 10 to 20%.\n"
-                    "- Attacks are fixed templates and mutations; guards have not yet faced an adaptive attacker.\n"
-                    "- Harmless prompts are few and easy, so over-refusal is probably underestimated.\n"
-                    "- Attack success is decided by an LLM judge; its agreement with human labels is reported separately.")
+        st.markdown("- Small attack set (about 120 fixed attacks) and 20 adaptive attempts per guard; a 0% result can still hide a true rate of up to about 3% (fixed set) or 16% (adaptive set).\n"
+                    "- The adaptive attacker is Claude Haiku and the Claude guard is also Haiku, so the guard may be better at spotting attacks written by its own kind.\n"
+                    "- About one in five Claude-guard blocks happened because the classifier refused to read the attack text; these are counted as blocks (fail closed), not as true classifications.\n"
+                    "- Harmless prompts are few (60 in total) and fairly easy, so over-refusal is probably underestimated.\n"
+                    "- Attack success is decided by an LLM judge (the adaptive run uses a plain canary-string check); judge agreement with human labels is not yet measured.")
 with tab1:
     st.subheader("Attack success rate by guard and category (95% Wilson interval)")
     piv = asr.pivot(index="category", columns="guard", values="asr")
