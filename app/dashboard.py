@@ -36,7 +36,7 @@ with tab0:
     guards = sorted(att.guard.unique())
     st.subheader("Does the guard stop attacks, and what does it cost?")
     cols = st.columns(len(guards))
-    ort, lat = metrics.overrefusal_table(df), metrics.latency_table(df)
+    ort, lat, cs = metrics.overrefusal_table(df), metrics.latency_table(df), metrics.claude_share(df)
     rows = []
     for col, g in zip(cols, guards):
         grp = att[att.guard == g]
@@ -47,7 +47,8 @@ with tab0:
         la = lat[lat.guard == g]
         rows.append({"guard": g, "attack success %": round(p * 100, 1), "interval %": f"{lo*100:.1f} to {hi*100:.1f}",
                      "harmless blocked by guard": int(o.guard_blocked.iloc[0]) if len(o) else None,
-                     "guard time per request (ms)": round(float(la.guard_median_ms.iloc[0]), 2) if len(la) else None})
+                     "guard time per request (ms)": round(float(la.guard_median_ms.iloc[0]), 2) if len(la) else None,
+                     "Claude called on % of requests": float(cs[cs.guard == g].claude_used_pct.iloc[0]) if (cs.guard == g).any() else None})
     st.dataframe(pd.DataFrame(rows), hide_index=True)
     st.info("Test app: a fake support bot with fake secrets, run on a small local model. Results describe this test set, not every LLM app.")
     with st.expander("Limitations"):

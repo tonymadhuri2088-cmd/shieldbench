@@ -66,6 +66,20 @@ def latency_table(df):
     return pd.DataFrame(out)
 
 
+def claude_share(df, cutoff_s: float = 0.2):
+    """Share of requests where the guard spent more than cutoff_s (only an LLM call takes that long),
+    i.e. how often the Claude guard was actually used. 'guard_mean_ms' is the average guard time per request."""
+    import pandas as pd
+    if "guard_s" not in df:
+        return pd.DataFrame(columns=["guard", "requests", "claude_used_pct", "guard_mean_ms"])
+    out = []
+    for g, grp in df.groupby("guard"):
+        gs = grp["guard_s"].dropna()
+        out.append({"guard": g, "requests": len(gs), "claude_used_pct": round(100 * float((gs > cutoff_s).mean()), 1) if len(gs) else float("nan"),
+                    "guard_mean_ms": round(float(gs.mean() * 1000), 1) if len(gs) else float("nan")})
+    return pd.DataFrame(out)
+
+
 def utility_table(df):
     """Task success on clean documents: did the bot still answer correctly?"""
     import pandas as pd
@@ -97,6 +111,14 @@ def block_breakdown(df):
         by = str(r["blocked_by"])
         if "stop_reason=refusal" in by or "classifier refused" in by:
             return "classifier refused to read input"
+        if "cascade: Claude guard" in by:
+            return "cascade: Claude guard decided"
+        if "cascade: detector" in by:
+            return "cascade: trained detector decided"
+        if "cascade:" in by:
+            return "cascade: regex rule decided"
+        if "detector score" in by:
+            return "trained detector score"
         if by.startswith("input:") and str(r["guard"]).startswith("g3"):
             return "classified as attack"
         if by.startswith("input:"):

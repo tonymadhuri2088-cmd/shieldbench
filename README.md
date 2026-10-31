@@ -39,7 +39,7 @@ flowchart LR
 
 - **Attack categories:** direct injection, indirect injection (instruction hidden in a retrieved document), jailbreak, system-prompt extraction, personal-data leakage.
 - **Mutators:** base64, leetspeak, roleplay, Hinglish, multi-turn. 22 seed attacks become 124 test cases.
-- **Guards:** G0 none; G1 regex rules (naive baseline); G3 Claude Haiku input classifier plus regex redaction of emails and phone numbers on output. G3 fails closed: if the classifier's reply cannot be read, the request is blocked.
+- **Guards:** G0 none; G1 regex rules (naive baseline); G2 a small trained detector (TF-IDF character n-grams + logistic regression, about 1 ms, free per request, sees decoded base64 and de-leetspeaked text); G3 Claude Haiku input classifier plus regex redaction of emails and phone numbers on output; G4 a cascade (regex, then G2, and Claude only when G2 is unsure). G3 fails closed: if the classifier's reply cannot be read, the request is blocked.
 - **Judges:** a rule judge (looks for canary strings) and a Claude judge (Sonnet, one rubric per category). The final verdict uses the Claude judge when it ran.
 - **Adaptive attacker:** a plain Python loop. A Claude Haiku attacker (local Ollama model as fallback if Claude refuses) writes a message, the message goes through the guard, the bot and the output guard, a deterministic canary check decides whether the goal was reached, and the reply is fed back for the next round (up to 6 rounds, 5 trials per goal, 4 goals: key, discount code, email, phone).
 - **Metrics:** attack success rate with Wilson intervals, over-refusal split into "guard blocked" and "bot refused", task success on clean documents, model latency vs guard overhead, a block breakdown, adaptive success and rounds to win.
@@ -70,7 +70,7 @@ How much to trust it:
 - **Harmless prompts are few** (60, hand-written) and fairly easy, so over-refusal is probably underestimated. XSTest and public attack sets are not included yet.
 - **Task success on clean documents** is checked with a keyword, a rough proxy.
 - **Hinglish mutation** only adds a Hindi polite prefix in front of the English attack; it is not native code-mixed text.
-- **No trained guard yet** (a small local classifier as a cheap alternative to the Claude guard is the planned next step).
+- **G2 and G4 are trained on generated text** (Claude-written examples, kept separate from the test attacks, with near-duplicates of test prompts removed). Cross-validation on generated text is optimistic; the numbers that count are G2/G4 on the fixed and adaptive tests.
 
 ## Setup
 
@@ -96,6 +96,12 @@ python -m shieldbench.run --target ollama --guards g0,g1,g3 --limit 10
 python -m shieldbench.run --target ollama --guards g0,g1,g3 --mutate base64,leetspeak,roleplay,hinglish,multi_turn --hard-benign --db results/final.db --export results/final_raw.csv
 python -m shieldbench.judge.run_judge --db results/final.db
 python -m shieldbench.report --db results/final.db --csv results/final_judged.csv
+
+# 3b. trained guard G2 and cascade G4 (a few cents for the training data, then free)
+pip install -r requirements.txt                       # adds scikit-learn
+python -m shieldbench.guardrails.train_data           # Claude Haiku writes the training examples (data/train/train.csv)
+python -m shieldbench.guardrails.train                # trains G2, prints cross-validation and leave-one-category-out recall
+python -m shieldbench.run --target ollama --guards g2,g4 --mutate base64,leetspeak,roleplay,hinglish,multi_turn --hard-benign --db results/final.db --export results/final_raw.csv
 
 # 4. adaptive attacker (a few cents)
 python -m shieldbench.attacks.adaptive --target ollama --attacker hybrid --guards g0,g1,g3 --trials 5 --rounds 6 --budget 1 --db results/final.db --export results/adaptive_runs.csv

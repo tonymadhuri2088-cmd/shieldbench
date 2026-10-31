@@ -76,9 +76,42 @@ def kappa_report(a_path, b_path, key_path):
         print(f"{name:12s} vs human  kappa = {cohen_kappa(h, j):.3f}  agree {sum(x == y for x, y in zip(h, j))}/{len(h)}  false-pos {fp}  false-neg {fn}")
 
 
+def check_report(labels_path, key_path, sheet_path, out_path=None):
+    """One human labeler vs the two judges (use when no second labeler exists)."""
+    h = pd.read_csv(labels_path)[["item_id", "label"]].dropna()
+    key = pd.read_csv(key_path).merge(h, on="item_id")
+    sheet = pd.read_csv(sheet_path)[["item_id", "bot_response"]]
+    key = key.merge(sheet, on="item_id", how="left")
+    key["label"] = key.label.astype(int)
+    print(f"items labeled by you: {len(key)}   you said 'attack succeeded' on {int(key.label.sum())} ({key.label.mean():.0%})")
+    rows = []
+    for name in ("rule_judge", "claude_judge"):
+        k = key[key[name].isin([0, 1])]
+        hh, jj = k.label.tolist(), k[name].astype(int).tolist()
+        fp = sum(x == 0 and y == 1 for x, y in zip(hh, jj))
+        fn = sum(x == 1 and y == 0 for x, y in zip(hh, jj))
+        agree = sum(x == y for x, y in zip(hh, jj))
+        print(f"{name:12s} vs you: agree {agree}/{len(k)} ({agree/len(k):.0%})  kappa {cohen_kappa(hh, jj):.3f}  "
+              f"false alarms {fp} (judge said success, you said no)  misses {fn} (judge said fail, you said success)")
+        rows.append((name, agree, len(k), fp, fn))
+    bad = key[(key.label != key.claude_judge.astype(float)) | (key.label != key.rule_judge.astype(float))].copy()
+    print(f"\n{len(bad)} items where you and at least one judge disagree. Re-read these in the labeling tool:")
+    for _, r in bad.iterrows():
+        txt = str(r.bot_response).replace("\n", " ")[:90]
+        print(f"  {r.item_id}  {r.category:18s} you={r.label}  claude={r.claude_judge}  rule={r.rule_judge}  | {txt}")
+    if out_path:
+        bad[["item_id", "category", "label", "claude_judge", "rule_judge"]].to_csv(out_path, index=False)
+        print(f"\nsaved {out_path}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     sp = ap.add_subparsers(dest="cmd", required=True)
+    c = sp.add_parser("check")
+    c.add_argument("--labels", required=True)
+    c.add_argument("--key", default=str(config.ROOT / "data" / "labels" / "key.csv"))
+    c.add_argument("--sheet", default=str(config.ROOT / "data" / "labels" / "label_sheet.csv"))
+    c.add_argument("--out", default=None)
     e = sp.add_parser("export")
     e.add_argument("--db", default=str(config.DB_PATH))
     e.add_argument("--n", type=int, default=100)
@@ -92,6 +125,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == "export":
         export(a.db, a.n, a.seed, a.out, a.run)
+    elif a.cmd == "check":
+        check_report(a.labels, a.key, a.sheet, a.out)
     else:
         kappa_report(a.a, a.b, a.key)
 

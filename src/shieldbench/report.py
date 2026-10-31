@@ -15,8 +15,14 @@ def main():
     store = Store(a.db)
     run = a.run
     if run == "latest":
-        run = store.con.execute("SELECT run_id FROM results ORDER BY ts DESC LIMIT 1").fetchone()[0]
-    df = metrics.with_verdict(store.results_df(run))
+        # every guard's most recent run, merged, so guards run at different times appear together
+        allr = store.results_df()
+        last = allr.sort_values("ts").groupby("guard").run_id.last()
+        df = allr[allr.run_id == allr.guard.map(last)].copy()
+        run = ", ".join(sorted(set(last.values)))
+    else:
+        df = store.results_df(run)
+    df = metrics.with_verdict(df)
     pd.set_option("display.width", 200)
     judged = int(df["judge_llm"].isin([0, 1]).sum()) if "judge_llm" in df else 0
     print(f"RUN {run}   target(s): {', '.join(df.target.unique())}   rows: {len(df)}   judged by Claude: {judged}")
@@ -41,6 +47,8 @@ def main():
     print(metrics.utility_table(df).round(3).to_string(index=False))
     print("\n== Latency: model (s) and guard overhead (ms) ==")
     print(metrics.latency_table(df).round(3).to_string(index=False))
+    print("\n== How often the Claude guard was used (guard time above 0.2 s) ==")
+    print(metrics.claude_share(df).to_string(index=False))
     ep = store.episodes_df()
     if len(ep):
         last = ep.sort_values("ts").run_id.iloc[-1]
