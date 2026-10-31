@@ -92,7 +92,7 @@ with tab5:
     if not adp:
         st.info("No adaptive attacker results yet. Run: python -m shieldbench.attacks.adaptive --export results/adaptive_runs.csv")
     else:
-        ep = pd.read_csv(adp[-1])
+        ep = pd.concat([pd.read_csv(f) for f in adp], ignore_index=True)
         st.subheader("Can an attacker that learns from replies get past each guard?")
         st.caption(f"Attacker: {ep.attacker.iloc[0]} | target: {ep.target.iloc[0]} | {len(ep)} episodes, up to {int(ep.rounds.max())} rounds each")
         at = metrics.adaptive_table(ep)
