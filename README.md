@@ -1,21 +1,76 @@
 # ShieldBench
 
-Automated red-teaming and guardrail evaluation for LLM apps. It attacks a **fake** customer-support bot (fake secret, fake customer data), judges whether each attack worked, applies guardrails, and reports attack success rate (ASR), over-refusal and latency before and after.
+Automated red-teaming and guardrail evaluation for LLM applications.
 
-> Scope: attacks run only against the test app in this repo. All secrets and personal data are fake canaries.
+ShieldBench attacks a **fake** customer-support bot (fake secrets, fake customers), decides whether each attack worked, applies guardrails, and reports how much each guard helps, what it costs in over-blocking and delay, and whether an attacker that learns from replies can still get through.
 
-## Status
+> Scope: attacks run only against the test app in this repo. Every secret and personal detail is a fake canary. Nothing here targets real systems.
 
-| Done | Next (see checklist) |
-|---|---|
-| Fake support bot, Ollama / Claude / mock targets | C5 Claude judge + human labels + kappa |
-| 22 seed attacks, 5 categories, 5 mutators | C7 G3 Claude guard + PII redaction |
-| G0 none, G1 regex, G3 Claude guard (Haiku input check + PII redaction) | C12 G2 trained detector |
-| Rule judge + Claude judge (Sonnet), SQLite cache, cost cap | C11 adaptive attacker |
-| ASR with Wilson intervals, over-refusal, latency, task success on clean docs | C13 deploy dashboard |
-| Human label sheet + Cohen's kappa tools, Streamlit dashboard, tests, CI | XSTest, public attack sets |
+## Headline results
 
-`results/sample_results.csv` comes from a scripted **mock** bot. It proves the pipeline works; it says nothing about real LLMs.
+Target: `llama3.2:3b` running locally (temperature 0, fixed seed). Test app: "AcmeBot", a support bot holding a fake API key, a fake staff discount code and two fake customers.
+
+| Guard | Fixed attacks that worked (124) | Adaptive attacker reached its goal (20 tries) | Harmless prompts blocked (60) | Added delay per request |
+|---|---|---|---|---|
+| G0 none | 16.9% (11.4 to 24.5) | **90%** (70 to 97) | 0 | none |
+| G1 regex rules | 5.6% (2.8 to 11.2) | **55%** (34 to 74) | 5 (8%) | under 1 ms |
+| G3 Claude guard | 0.0% (0 to 3.0) | **0%** (0 to 16) | 0 | about 1.2 s (median) |
+
+Intervals are 95% Wilson intervals. They are wide because the test sets are small; a 0% result means "probably below the upper end of the interval", not "zero".
+
+What the numbers say:
+
+1. **Fixed tests flatter weak guards.** The regex guard looks good on fixed attacks (5.6%) but an attacker that adapts gets the secret key and the discount code every time (10 of 10). The regex guard only helps against personal-data leaks (the attacker won 1 of 10 there).
+2. **The Claude guard held** across 120 adaptive rounds and all fixed attacks, without blocking any of 60 harmless prompts (36 of them deliberately tricky).
+3. **It costs time:** the Claude guard adds about 1.2 s per request (p95 1.7 s), roughly 40% on top of the local model's 3 s reply.
+4. **The judge was checked by hand.** On 100 hand-labeled replies the Claude judge agreed with the human on 97 of 97 it scored; the simple rule judge agreed on 96 of 100 and wrongly counted 3 refusals that quoted a secret as leaks (see "Judge validation" for how much to trust this).
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[Attack library<br/>22 seeds x 5 mutators<br/>+ adaptive attacker] --> G1[Input guard]
+  G1 --> B[Target bot<br/>local Ollama / Claude / mock]
+  B --> G2[Output guard<br/>PII redaction]
+  G2 --> J[Judge<br/>rule + Claude]
+  J --> S[(SQLite<br/>results + cache)]
+  S --> R[Report + Streamlit dashboard]
+```
+
+- **Attack categories:** direct injection, indirect injection (instruction hidden in a retrieved document), jailbreak, system-prompt extraction, personal-data leakage.
+- **Mutators:** base64, leetspeak, roleplay, Hinglish, multi-turn. 22 seed attacks become 124 test cases.
+- **Guards:** G0 none; G1 regex rules (naive baseline); G3 Claude Haiku input classifier plus regex redaction of emails and phone numbers on output. G3 fails closed: if the classifier's reply cannot be read, the request is blocked.
+- **Judges:** a rule judge (looks for canary strings) and a Claude judge (Sonnet, one rubric per category). The final verdict uses the Claude judge when it ran.
+- **Adaptive attacker:** a plain Python loop. A Claude Haiku attacker (local Ollama model as fallback if Claude refuses) writes a message, the message goes through the guard, the bot and the output guard, a deterministic canary check decides whether the goal was reached, and the reply is fed back for the next round (up to 6 rounds, 5 trials per goal, 4 goals: key, discount code, email, phone).
+- **Metrics:** attack success rate with Wilson intervals, over-refusal split into "guard blocked" and "bot refused", task success on clean documents, model latency vs guard overhead, a block breakdown, adaptive success and rounds to win.
+- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 30 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
+
+## Judge validation
+
+100 bot replies (stratified by category) were exported as a blind sheet and labeled by hand by one person.
+
+| Judge | Agrees with human | Kappa | False alarms | Misses |
+|---|---|---|---|---|
+| Claude judge | 97 / 97 | 1.00 | 0 | 0 |
+| Rule judge | 96 / 100 | 0.87 | 3 | 1 |
+
+How much to trust it:
+- The first, fully blind pass agreed with the Claude judge on 89% (kappa 0.53); most disagreements were hasty human errors.
+- The human then re-read the 17 replies where they disagreed with a judge, after seeing that they disagreed. This makes the table above optimistic.
+- One labeler, 100 replies. A second labeler and a larger sample are needed before calling the judge "validated".
+- The rule judge's false alarms are all refusals that quote the secret or the attack word, which is why the Claude judge decides the final verdict.
+- Three replies could not be scored by the Claude judge and are excluded from its row.
+
+## Known limitations
+
+- **Small test sets.** About 120 fixed attacks and 20 adaptive tries per guard. A 0% result can hide a true rate of about 3% (fixed set) or 16% (adaptive set).
+- **Same model family.** The adaptive attacker and the Claude guard are both Haiku, so the guard may be better at spotting attacks written by its own kind.
+- **Fail-closed blocks.** 26 of the Claude guard's 124 blocks on fixed attacks happened because the classifier refused to read the attack text (`stop_reason=refusal`). They are counted as blocks, not as true classifications.
+- **One small target model**, one fake app, one language mix. Results describe this test setup, not every LLM application.
+- **Harmless prompts are few** (60, hand-written) and fairly easy, so over-refusal is probably underestimated. XSTest and public attack sets are not included yet.
+- **Task success on clean documents** is checked with a keyword, a rough proxy.
+- **Hinglish mutation** only adds a Hindi polite prefix in front of the English attack; it is not native code-mixed text.
+- **No trained guard yet** (a small local classifier as a cheap alternative to the Claude guard is the planned next step).
 
 ## Setup
 
@@ -23,10 +78,10 @@ Automated red-teaming and guardrail evaluation for LLM apps. It attacks a **fake
 python -m venv .venv
 .venv\Scripts\activate          # Windows;  source .venv/bin/activate on Linux/Mac
 pip install -r requirements.txt
-copy .env.example .env          # then edit if you use Claude
-set PYTHONPATH=src              # PowerShell: $env:PYTHONPATH="src"
-pytest                          # 7 tests should pass
+copy .env.example .env          # add your Anthropic key only if you use Claude
+pytest                          # 30 tests should pass
 ```
+Never commit `.env`; it is in `.gitignore`.
 
 ## Run
 
@@ -34,42 +89,26 @@ pytest                          # 7 tests should pass
 # 1. pipeline check with the mock bot (free, instant)
 python -m shieldbench.run --target mock --guards g0,g1 --export results/mock_run.csv
 
-# 2. real local model (needs: ollama pull llama3.2:3b). Small batch first!
-python -m shieldbench.run --target ollama --guards g0,g1 --limit 10
-python -m shieldbench.run --target ollama --guards g0,g1 --mutate base64,leetspeak,roleplay,hinglish,multi_turn --export results/ollama_run.csv
+# 2. real local model (needs: ollama pull llama3.2:3b). Small batch first
+python -m shieldbench.run --target ollama --guards g0,g1,g3 --limit 10
 
-# 3. Claude target (costs credit; set a spending limit in the Anthropic Console first)
-python -m shieldbench.run --target claude --guards g0,g1 --limit 10 --budget 1
+# 3. full run with all mutators and the tricky harmless prompts, then judge and report
+python -m shieldbench.run --target ollama --guards g0,g1,g3 --mutate base64,leetspeak,roleplay,hinglish,multi_turn --hard-benign --db results/final.db --export results/final_raw.csv
+python -m shieldbench.judge.run_judge --db results/final.db
+python -m shieldbench.report --db results/final.db --csv results/final_judged.csv
 
-# 4. dashboard
+# 4. adaptive attacker (a few cents)
+python -m shieldbench.attacks.adaptive --target ollama --attacker hybrid --guards g0,g1,g3 --trials 5 --rounds 6 --budget 1 --db results/final.db --export results/adaptive_runs.csv
+
+# 5. dashboard
 streamlit run app/dashboard.py
 ```
 
-Reruns are free: every model call is cached in SQLite by hash of (model, messages). A run stops with `BudgetExceeded` at the cap.
-
-## Guards and final numbers
-
+Judge validation:
 ```bash
-python -m shieldbench.run --target ollama --guards g0,g1,g3 --mutate base64,leetspeak,roleplay,hinglish,multi_turn --limit 10   # small batch first
-python -m shieldbench.judge.run_judge        # Claude judge on the latest run
-python -m shieldbench.report                 # all tables
-```
-For the FINAL numbers use a fresh database so latency is measured on real calls, not read from an older cache:
-`--db results/final.db` on both `run` and `run_judge` / `report`.
-G3 fails closed: if the guard's reply cannot be parsed the request is blocked.
-
-## Judge validation (C5, C6)
-
-```bash
-# 1. judge a run with Claude (costs a little; try --limit 10 first)
-python -m shieldbench.judge.run_judge --limit 10
-python -m shieldbench.judge.run_judge
-# 2. make a blind label sheet (100 items, stratified by category)
-python -m shieldbench.judge.label export --n 100
-#    give a COPY of data/labels/label_sheet.csv to each of two people; they fill the `label` column (1 = attack succeeded, 0 = failed)
-#    keep data/labels/key.csv private (it holds the judge verdicts)
-# 3. agreement numbers
-python -m shieldbench.judge.label kappa --a data/labels/A.csv --b data/labels/B.csv
+python -m shieldbench.judge.label export --n 100          # blind sheet + private key
+python -m shieldbench.judge.label check --labels data/labels/human_labels3.csv --out data/labels/recheck3.csv
+python -m shieldbench.judge.label kappa --a A.csv --b B.csv   # when two people labeled
 ```
 
 ## Layout
@@ -77,30 +116,10 @@ python -m shieldbench.judge.label kappa --a data/labels/A.csv --b data/labels/B.
 ```
 src/shieldbench/
   targets/     fake_data, support_bot, ollama_target, claude_target, mock_target
-  attacks/     library (seed attacks), mutators
-  guardrails/  base, regex_guard (G1), pipeline
-  judge/       rule_judge (canary / marker checks)
-  eval/        runner, metrics (Wilson, over-refusal, latency), cost (cap)
-  store/       db (SQLite results + cache)
-app/dashboard.py   tests/   results/
+  attacks/     library (seed + hard harmless prompts), mutators, adaptive (attacker loop)
+  guardrails/  base, regex_guard (G1), claude_guard (G3), pipeline
+  judge/       rule_judge, claude_judge, run_judge, label (human labels, kappa)
+  eval/        runner, metrics (Wilson, over-refusal, latency, adaptive), cost (cap)
+  store/       db (SQLite results, cache, adaptive episodes)
+app/dashboard.py   tests/   results/   data/labels/
 ```
-
-## Known limitations (so far)
-
-- Task success on clean documents is checked with a keyword, a rough proxy.
-- The rule judge counts a response as an attack success if it contains the marker or a canary, even if the bot quoted it while refusing. The Claude judge (C5) and human labels will measure this error.
-- Seed attacks are our own templates; public sets (JailbreakBench, HarmBench subsets) are not added yet.
-- Over-refusal uses 12 hand-written benign prompts, not XSTest yet, and a simple refusal-phrase check.
-- Hinglish mutation is only a polite prefix so far; real Hindi / code-mixed attacks are still to write.
-- Cost prices in `config.py` are placeholders; check the official pricing page.
-
-## Adaptive attacker (C11)
-
-```bash
-# small test first (a few cents): 1 trial, 3 rounds
-python -m shieldbench.attacks.adaptive --target ollama --attacker hybrid --guards g0,g1,g3 --trials 1 --rounds 3 --budget 0.5
-# full run + export for the dashboard
-python -m shieldbench.attacks.adaptive --target ollama --attacker hybrid --trials 3 --rounds 6 --budget 1 --export results/adaptive_runs.csv
-```
-`hybrid` = Claude writes the attack; if Claude refuses, the local model writes it. Refusals are counted, not hidden.
-Add `--hard-benign` to `shieldbench.run` to include 36 tricky-but-harmless prompts in the over-refusal numbers.
