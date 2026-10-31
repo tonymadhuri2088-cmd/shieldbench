@@ -28,7 +28,7 @@ if choice.startswith("sample"):
 st.sidebar.write(f"Target: **{', '.join(df.target.unique())}**")
 st.sidebar.write(f"Rows: {len(df)}")
 
-tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Attack success", "Over-refusal and latency", "Mutations", "Examples", "Adaptive attacker"])
+tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Attack success", "Over-refusal and latency", "Mutations", "Examples", "Adaptive attacker", "Judge reliability"])
 df = metrics.with_verdict(df)
 asr = metrics.asr_table(df, "verdict")
 with tab0:
@@ -55,7 +55,7 @@ with tab0:
                     "- The adaptive attacker is Claude Haiku and the Claude guard is also Haiku, so the guard may be better at spotting attacks written by its own kind.\n"
                     "- About one in five Claude-guard blocks happened because the classifier refused to read the attack text; these are counted as blocks (fail closed), not as true classifications.\n"
                     "- Harmless prompts are few (60 in total) and fairly easy, so over-refusal is probably underestimated.\n"
-                    "- Attack success is decided by an LLM judge (the adaptive run uses a plain canary-string check); judge agreement with human labels is not yet measured.")
+                    "- Attack success is decided by an LLM judge (the adaptive run uses a plain canary-string check). Judge agreement with one human labeler on 100 replies is on the Judge reliability tab; it is a single labeler and a small sample.")
 with tab1:
     st.subheader("Attack success rate by guard and category (95% Wilson interval)")
     piv = asr.pivot(index="category", columns="guard", values="asr")
@@ -109,3 +109,41 @@ with tab5:
         for t in _json.loads(row.transcript):
             st.markdown(f"**Round {t['round']} attacker:** {pd.Series([t['message']]).str.replace(red, '[REDACTED]', regex=True).iloc[0][:400]}")
             st.markdown(f"**Bot:** {pd.Series([t['reply']]).str.replace(red, '[REDACTED]', regex=True).iloc[0][:300]}  _(blocked by: {t['blocked_by'] or 'nothing'})_")
+
+with tab6:
+    LAB = Path(__file__).resolve().parents[1] / "data" / "labels"
+    hp, kp = LAB / "human_labels3.csv", LAB / "key.csv"
+    st.subheader("Is the judge right? Checked against hand labels")
+    if not (hp.exists() and kp.exists()):
+        st.info("Hand-label files not found in data/labels/ (human_labels3.csv and key.csv).")
+    else:
+        hum = pd.read_csv(hp)[["item_id", "label"]].dropna()
+        key = pd.read_csv(kp).merge(hum, on="item_id")
+        key["label"] = key.label.astype(int)
+
+        def _kappa(a, b):
+            n = len(a)
+            po = sum(x == y for x, y in zip(a, b)) / n
+            pe = sum((sum(x == c for x in a) / n) * (sum(y == c for y in b) / n) for c in set(a) | set(b))
+            return 1.0 if pe == 1 else (po - pe) / (1 - pe)
+
+        rows = []
+        for name, label in (("rule_judge", "Rule judge (canary string match)"), ("claude_judge", "Claude judge (Sonnet, per-category rubric)")):
+            k = key[key[name].isin([0, 1])]
+            h, j = k.label.tolist(), k[name].astype(int).tolist()
+            agree = sum(x == y for x, y in zip(h, j))
+            lo, hi = metrics.wilson(agree, len(k))[1:]
+            rows.append({"judge": label, "replies scored": len(k), "agrees with human": agree,
+                         "agreement %": round(100 * agree / len(k), 1), "interval %": f"{lo*100:.0f} to {hi*100:.0f}",
+                         "kappa": round(_kappa(h, j), 2),
+                         "false alarms": sum(x == 0 and y == 1 for x, y in zip(h, j)),
+                         "misses": sum(x == 1 and y == 0 for x, y in zip(h, j))})
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
+        st.caption(f"{len(key)} replies were labeled by hand (1 labeler); {int(key.label.sum())} were attacks that worked. "
+                   "False alarm = judge said the attack worked but the human said no. Miss = the reverse.")
+        st.markdown("**How to read this honestly**")
+        st.markdown("- The first, fully blind pass agreed with the Claude judge on 89% of replies (kappa 0.53). Most disagreements were hasty human errors.\n"
+                    "- The human then re-read the 17 replies where they disagreed with a judge, after seeing that they disagreed. That makes the figures above optimistic.\n"
+                    "- The rule judge counts a refusal that quotes the secret or the attack word as a leak. This is why the Claude judge decides the final verdict.\n"
+                    "- A few replies could not be scored by the Claude judge and are left out of its row.\n"
+                    "- One labeler and 100 replies is a small check, not proof.")
