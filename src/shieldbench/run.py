@@ -13,6 +13,9 @@ def make_target(name: str):
     if name == "ollama":
         from .targets.ollama_target import OllamaTarget
         return OllamaTarget()
+    if name == "openai":
+        from .targets.openai_target import OpenAICompatTarget
+        return OpenAICompatTarget()
     if name == "claude":
         from .targets.claude_target import ClaudeTarget
         return ClaudeTarget()
@@ -21,7 +24,7 @@ def make_target(name: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target", default="mock", choices=["mock", "ollama", "claude"])
+    ap.add_argument("--target", default="mock", choices=["mock", "ollama", "claude", "openai"], help="openai = any OpenAI-compatible server, set OPENAI_COMPAT_URL / _MODEL / _KEY")
     ap.add_argument("--guards", default="g0,g1")
     ap.add_argument("--mutate", default="", help="comma list: base64,leetspeak,roleplay,hinglish,multi_turn")
     ap.add_argument("--hard-benign", action="store_true", help="add 36 tricky-but-harmless prompts for over-refusal")

@@ -97,12 +97,71 @@ class Protector:
         return self.bot.generate(build_messages(message, None, list(self.history))).text
 
 
+def _flatten(content) -> str:
+    """OpenAI messages may carry a list of parts instead of a string."""
+    if isinstance(content, list):
+        return " ".join(str(c.get("text", "")) for c in content if isinstance(c, dict))
+    return str(content or "")
+
+
+def gateway_complete(guard, bot, messages: list, context: str = "last", model: str = "") -> dict:
+    """A drop-in guard for any app that talks the OpenAI chat format. Returns an OpenAI-style completion plus a 'shieldbench' block.
+    The app's own system prompt and history are passed to the model untouched; only the guard decides to refuse or redact."""
+    t = {}
+    msgs = [{"role": str(m.get("role", "user")), "content": _flatten(m.get("content"))} for m in messages if isinstance(m, dict)]
+    users = [m["content"] for m in msgs if m["role"] == "user"]
+    if not users:
+        raise ValueError("no user message")
+    text = users[-1] if context != "full" else "\n".join(users)
+    t0 = time.perf_counter()
+    vin = guard.check_input(text)
+    t["guard_in"] = round((time.perf_counter() - t0) * 1000, 2)
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    reason, stage, allowed, redacted = "", "passed", True, False
+    if vin.blocked:
+        reply, allowed, stage, reason = BLOCK_MESSAGE, False, "input", vin.reason
+    elif bot is None:
+        reply = "(guard passed this message; no model is attached to the gateway)"
+    else:
+        t1 = time.perf_counter()
+        rep = bot.generate(msgs)
+        t["model"] = round((time.perf_counter() - t1) * 1000, 2)
+        usage = {"prompt_tokens": rep.in_tokens, "completion_tokens": rep.out_tokens, "total_tokens": rep.in_tokens + rep.out_tokens}
+        t2 = time.perf_counter()
+        vout = guard.check_output(rep.text)
+        t["guard_out"] = round((time.perf_counter() - t2) * 1000, 2)
+        if vout.blocked:
+            reply, allowed, stage, reason = BLOCK_MESSAGE, False, "output", vout.reason
+        elif vout.text is not None and vout.text != rep.text:
+            reply, redacted, reason = vout.text, True, vout.reason
+        else:
+            reply = rep.text
+    t["total"] = round(sum(t.values()), 2)
+    return {"id": "chatcmpl-sb-" + format(int(time.time() * 1000), "x"), "object": "chat.completion", "created": int(time.time()),
+            "model": model or (getattr(bot, "name", None) or "shieldbench-gateway"),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop" if allowed else "content_filter"}],
+            "usage": usage,
+            "shieldbench": {"allowed": allowed, "stage": stage, "reason": reason, "redacted": redacted, "guard": guard.name, "timings_ms": t}}
+
+
+def _sse(completion: dict) -> bytes:
+    """The same answer as one server-sent-events stream, for clients that ask for stream=true."""
+    c = completion["choices"][0]
+    base = {"id": completion["id"], "object": "chat.completion.chunk", "created": completion["created"], "model": completion["model"]}
+    a = dict(base, choices=[{"index": 0, "delta": {"role": "assistant", "content": c["message"]["content"]}, "finish_reason": None}])
+    b = dict(base, choices=[{"index": 0, "delta": {}, "finish_reason": c["finish_reason"]}], shieldbench=completion["shieldbench"])
+    return ("".join("data: " + json.dumps(x, ensure_ascii=False) + "\n\n" for x in (a, b)) + "data: [DONE]\n\n").encode()
+
+
 def serve(p: Protector, port: int, site: str | None = None, target: str = "none"):
     """Local web server (one request at a time, so the SQLite cache is only ever used from one thread): the JSON API for the live demo and, with `site`, the web page itself (same address, so no browser permission problems).
     GET  /api/health                      what is available
     POST /api/check  {"message", "guard"?, "reset"?}                 guard decision (guards g0..g4; g3/g4 need ANTHROPIC_API_KEY)
     POST /api/agent  {"message", "policy": true|false, "planted_note"?}   run AcmeAgent (needs --target ollama or claude)
-    POST /check      same as /api/check (older name)"""
+    POST /check      same as /api/check (older name)
+    POST /v1/chat/completions   the GATEWAY: OpenAI-compatible, so any app or OpenAI client can point at http://127.0.0.1:PORT/v1
+                                (guard from the X-Shieldbench-Guard header or the server default; stream=true works; blocked -> finish_reason content_filter)
+    GET  /v1/models  one entry, so clients that list models do not fail"""
     from http.server import BaseHTTPRequestHandler, HTTPServer
     import mimetypes
     guards = {p.guard.name.split("_")[0]: p}
@@ -138,7 +197,7 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
         def _cors(self):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Shieldbench-Guard")
             self.send_header("Access-Control-Allow-Private-Network", "true")
 
         def _send(self, code, obj):
@@ -150,6 +209,29 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
             self.end_headers()
             self.wfile.write(b)
 
+        def _gateway(self, body):
+            try:
+                q = get_protector(self.headers.get("X-Shieldbench-Guard", "").strip())
+                bot = p.bot if p.bot is not None else None
+                out = gateway_complete(q.guard, bot, body.get("messages") or [], p.context, str(body.get("model", "")))
+            except ValueError as e:
+                return self._send(400, {"error": {"message": str(e), "type": "invalid_request_error"}})
+            except KeyError:
+                return self._send(400, {"error": {"message": "unknown guard; use g0, g1, g2, g3 or g4", "type": "invalid_request_error"}})
+            except RuntimeError as e:
+                return self._send(502, {"error": {"message": str(e), "type": "upstream_error"}})
+            if body.get("stream"):
+                data = _sse(out)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Content-Length", str(len(data)))
+                self._cors()
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            self._send(200, out)
+
         def do_OPTIONS(self):
             self.send_response(204)
             self._cors()
@@ -160,6 +242,8 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
             if path == "/api/health":
                 return self._send(200, {"ok": True, "service": "shieldbench-live", "default_guard": p.guard.name, "bot": target,
                                         "agent": target not in ("none", ""), "guards": ["g0", "g1", "g2", "g3", "g4"]})
+            if path in ("/v1/models", "/models"):
+                return self._send(200, {"object": "list", "data": [{"id": "shieldbench-gateway", "object": "model", "owned_by": "shieldbench"}]})
             if root is not None and not path.startswith("/api/"):
                 f = (root / ("index.html" if path in ("", "/") else path.lstrip("/"))).resolve()
                 if root in f.parents or f == root:
@@ -179,6 +263,8 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
             try:
                 n = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(n) or b"{}")
+                if path in ("/v1/chat/completions", "/chat/completions"):
+                    return self._gateway(body)
                 msg = str(body.get("message", ""))
                 if not msg.strip():
                     return self._send(400, {"error": "message is empty"})
@@ -202,6 +288,7 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
 
     where = f" and the site from {site}" if site else ""
     print(f"ShieldBench live on http://127.0.0.1:{port}/  (API at /api/check{where}; default guard {p.guard.name}; bot: {target}). Ctrl+C to stop.")
+    print(f"Gateway: point any OpenAI client at http://127.0.0.1:{port}/v1  (no login, this computer only)")
     HTTPServer(("127.0.0.1", port), H).serve_forever()
 
 

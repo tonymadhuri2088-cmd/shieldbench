@@ -293,3 +293,14 @@ Each round, a Claude attacker writes fresh attacks (a Claude judge checks that t
 Outputs: `results/arena.json`, `results/arena_rounds.csv`, `results/arena_summary.md`, `data/models/g2_arena.joblib` (the normal `g2.joblib` is never replaced). Then run `python -m shieldbench.export_site` to show it on the Results page. Calls are cached (`results/arena_cache/`), so a rerun is free, and a hard spending cap stops the run.
 
 Limits: attacker, judge and Claude guard are the same model family; labels come from a model; each round is a small batch; the detector may only learn this attacker's style. The Results page also gets a chart of attacks that worked against harmless prompts blocked, per guard.
+
+## The Gateway (v0.37)
+**1. Attack any model.** `--target openai` talks to any server that speaks the OpenAI chat format (Ollama's `/v1`, LM Studio, vLLM, llama.cpp, hosted models). Settings are environment variables or `.env`: `OPENAI_COMPAT_URL` (default `http://localhost:11434/v1`), `OPENAI_COMPAT_MODEL`, `OPENAI_COMPAT_KEY` (optional, never printed), `OPENAI_COMPAT_PRICE` (optional `input,output` USD per million tokens so the spending cap works).
+
+    python -m shieldbench.run --target openai --guards g0,g2 --attack-set heldout4 --limit 10
+
+**2. Drop-in guard proxy.** The live server also answers `POST /v1/chat/completions` in the OpenAI format, so an app or an OpenAI client can point at `http://127.0.0.1:8765/v1`. The newest user message goes through the guard first (header `X-Shieldbench-Guard` picks g0 to g4). An attack comes back as a refusal with `finish_reason: content_filter` and a `shieldbench` block (guard, stage, reason, timings). A normal message goes to the model attached with `--target`, and the answer is checked (and redacted) on the way out. `stream: true` works.
+
+    python -m shieldbench.live --serve 8765 --guard g2 --target ollama --site docs
+
+Limits: runs on this computer only, no login, checks the newest message only (not the whole conversation), one request at a time, the streamed answer arrives as a single chunk.
