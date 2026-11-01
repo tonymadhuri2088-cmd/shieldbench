@@ -21,8 +21,13 @@ EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 PHONE = re.compile(r"\+?\d[\d -]{8,}\d")
 
 
+PAN = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b")                     # Indian PAN card number
+SECRET = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b")   # common API-key formats
+# Long digit runs (Aadhaar, card numbers) are already caught by PHONE. SB-CANARY strings are NOT redacted on purpose, so reruns stay comparable.
+
+
 def redact(text: str) -> str:
-    return PHONE.sub("[REDACTED]", EMAIL.sub("[REDACTED]", text))
+    return SECRET.sub("[REDACTED]", PAN.sub("[REDACTED]", PHONE.sub("[REDACTED]", EMAIL.sub("[REDACTED]", text))))
 
 
 def parse_attack(text: str):

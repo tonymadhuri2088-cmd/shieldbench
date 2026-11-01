@@ -300,7 +300,7 @@ print(r.choices[0].finish_reason, r.choices[0].message.content)   # content_filt
       <li>The live server has no login and runs only on 127.0.0.1. It is for demos.</li>
     </ul></div>
   <div class="block"><header><h2>Built with</h2></header>
-    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (73 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
+    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (80 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
 <footer><div class="who">{{LOGO}}<div class="avatar" style="width:30px;height:30px;font-size:13px">{{INITIAL}}</div><div><b>{{AUTHOR}}</b> <span>{{COLLEGE}}</span></div></div><div>All targets are fake apps with fake data. <span id="gen"></span></div></footer>
@@ -424,8 +424,9 @@ function renderStatic(){
 
 /* ---------- live console ---------- */
 function setStatus(on,msg){online=on;$("#dot").className="dot "+(on?"on":"off");$("#stat").textContent=msg}
+var SAME=location.protocol.indexOf("http")===0&&!/github\.io$/.test(location.hostname);   /* served by the ShieldBench server itself (localhost or a tunnel address) */
 function probe(){
-  var bases=[location.origin.indexOf("http")===0&&/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":null,"http://127.0.0.1:8765"].filter(function(x){return x!==null});
+  var bases=[SAME?"":null,"http://127.0.0.1:8765"].filter(function(x){return x!==null});
   (function next(i){
     if(i>=bases.length){setStatus(false,"live backend: not running");$("#offline").hidden=false;$("#console").style.opacity=.55;return}
     fetch(bases[i]+"/api/health").then(function(r){return r.json()}).then(function(h){
@@ -446,7 +447,9 @@ $("#g-go").addEventListener("click",function(){
   post("/api/check",{message:msg,guard:$("#g-guard").value,reset:true}).then(function(r){
     var ok=r.allowed;hist.unshift({ok:ok,t:msg,g:r.guard});hist=hist.slice(0,6);
     var tm=r.timings_ms||{};
-    $("#out").innerHTML="<div class='verdict "+(ok?"allow":"deny")+"'>"+(ok?"ALLOWED":"BLOCKED")+"</div><dl class='kv'><dt>Guard</dt><dd>"+esc(r.guard)+"</dd><dt>Stopped at</dt><dd>"+esc(r.stage)+"</dd><dt>Reason</dt><dd>"+esc(r.reason||"no rule or score reached the blocking level")+"</dd><dt>Guard time</dt><dd class='mono'>"+(tm.guard_in!=null?tm.guard_in:tm.total)+" ms</dd><dt>Customer sees</dt><dd>"+esc(r.reply)+"</dd></dl><div class='hist'>"+hist.map(function(h){return"<div><em style='color:var(--"+(h.ok?"stop":"fail")+")'>"+(h.ok?"allowed":"blocked")+"</em><span>"+esc(h.t)+"</span></div>"}).join("")+"</div>";
+    $("#out").innerHTML="<div class='verdict "+(ok?"allow":"deny")+"'>"+(ok?"ALLOWED":"BLOCKED")+"</div><dl class='kv'><dt>Guard</dt><dd>"+esc(r.guard)+"</dd><dt>Stopped at</dt><dd>"+esc(r.stage)+"</dd><dt>Reason</dt><dd>"+esc(r.reason||"no rule or score reached the blocking level")+"</dd><dt>Guard time</dt><dd class='mono'>"+(tm.guard_in!=null?tm.guard_in:tm.total)+" ms</dd><dt>Customer sees</dt><dd>"+esc(r.reply)+"</dd></dl><div class='hist'>"+hist.map(function(h){return"<div><em style='color:var(--"+(h.ok?"stop":"fail")+")'>"+(h.ok?"allowed":"blocked")+"</em><span>"+esc(h.t)+"</span></div>"}).join("")+"</div><div class='row' id='fb' style='margin-top:12px'><span class='small muted'>Was this wrong?</span><button type='button' class='chip' data-l='harmless'>It was harmless</button><button type='button' class='chip' data-l='attack'>It was an attack</button></div>";
+    Array.prototype.forEach.call(document.querySelectorAll("#fb .chip"),function(c){c.addEventListener("click",function(){
+      post("/api/feedback",{text:msg,label:c.getAttribute("data-l"),guard:r.guard}).then(function(){$("#fb").innerHTML="<span class='small muted'>Saved. It goes into the next retraining run (improve.py).</span>"}).catch(function(e){$("#fb").innerHTML="<span class='small' style='color:var(--fail)'>"+esc(e.message)+"</span>"})})});
   }).catch(function(e){$("#out").innerHTML="<p style='color:var(--fail)'>"+esc(e.message)+"</p><p class='muted small'>The Claude guard and the cascade need ANTHROPIC_API_KEY set on the computer that runs the server.</p>"}).then(function(){b.disabled=false;b.textContent="Check message"});
 });
 $("#g-gw").addEventListener("click",function(){
@@ -488,7 +491,7 @@ function boot(d){
   chips("#g-ex",D.examples.guard,function(x){$("#g-msg").value=x.text});
   chips("#a-ex",D.examples.agent,function(x){$("#a-msg").value=x.message;$("#a-note").value=x.planted_note||""});
   show(location.hash.slice(1));
-  fetch((/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":"http://127.0.0.1:8765")+"/api/health").then(function(r){return r.json()}).then(function(h){if(h&&h.ok){api=/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":"http://127.0.0.1:8765";setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#c-agent").disabled=!h.agent}else throw 0}).catch(function(){setStatus(false,"live backend: not running")});
+  fetch((SAME?"":"http://127.0.0.1:8765")+"/api/health").then(function(r){return r.json()}).then(function(h){if(h&&h.ok){api=SAME?"":"http://127.0.0.1:8765";setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#c-agent").disabled=!h.agent}else throw 0}).catch(function(){setStatus(false,"live backend: not running")});
 }
 fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(boot).catch(function(){document.querySelector("main").insertAdjacentHTML("afterbegin","<p style='color:var(--fail)'>data.json could not be loaded. Run python -m shieldbench.export_site and serve the docs folder.</p>")});
 })();

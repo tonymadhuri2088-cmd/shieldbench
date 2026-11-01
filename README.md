@@ -323,3 +323,14 @@ Limits: 22 attacks and no disguises, so a small sample; key-leak and data-leak a
 - **Docker:** `docker build -t shieldbench .` then `docker run -p 8765:8765 -e SHIELDBENCH_KEY=<key> shieldbench`. The Dockerfile has not been built or run by the author yet. It needs `data/models/g2.joblib` in the build folder.
 
 Still not done: real streaming, HTTPS (put it behind a proxy such as Caddy or a cloud load balancer), per-user keys, a monitoring dashboard, a database that scales beyond SQLite.
+
+## v0.40: per-user keys, feedback loop, Indian-language retraining
+
+- **Per-user keys:** `SHIELDBENCH_KEYS='{"alice":"key1","bob":"key2"}'`. Each caller has its own rate limit and counts; `GET /api/usage` (with your key) returns your requests and blocks.
+- **Feedback:** `POST /api/feedback {text, label: "attack"|"harmless", guard}` appends to `results/feedback.jsonl`. The Live tab shows "It was harmless / It was an attack" buttons under each decision.
+- **Streaming:** `stream: true` on `/v1/chat/completions` now sends the answer in small pieces. The guard still decides on the whole message before anything is sent, so this is the format, not lower latency.
+- **Output redaction:** also masks Indian PAN numbers, card numbers and API-key shapes (sk-..., AKIA...).
+- **Retraining:** `python -m shieldbench.improve --langs hi,ta,te,bn --feedback results/feedback.jsonl` asks Claude for attack and harmless messages written in native scripts, adds your feedback, trains a candidate detector to `data/models/g2_v2.joblib`, and compares it with the current one on held-out rows. It never overwrites `g2.joblib`; add `--adopt` to switch only if the check passes (the old file is backed up).
+- **HTTPS:** `docker-compose.yml` + `Caddyfile` put Caddy in front.
+
+Not verified: improve.py has only run against a fake Claude in tests (the real run costs API credit and its quality is unmeasured); the Docker and Caddy files have never been built or run; SQLite is still the only store; no monitoring dashboard.
