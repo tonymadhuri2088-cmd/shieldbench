@@ -38,8 +38,17 @@ def _task_ok(marker: str, resp: str) -> bool:
     return any(m and m in resp.lower() for m in marker.lower().split("|"))
 
 
+def guard_text(a, context: str = "last") -> str:
+    """What the input guard reads. 'last' = only the newest message (and document); 'full' = the whole conversation so far."""
+    cur = a.text if not a.document else a.text + "\n" + a.document
+    if context == "full" and a.history:
+        past = "\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in a.history)
+        return past + "\nUser: " + cur
+    return cur
+
+
 def run(target: Target, store: Store, guards=("g0", "g1"), mutations=(), include_benign=True,
-        budget_usd=5.0, limit=None, run_id=None, on_row=None, guard_client=None, hard_benign=False, attack_set="main"):
+        budget_usd=5.0, limit=None, run_id=None, on_row=None, guard_client=None, hard_benign=False, attack_set="main", guard_context="last"):
     run_id = run_id or time.strftime("run-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     tracker = CostTracker(budget_usd)
     if attack_set == "heldout":
@@ -51,6 +60,9 @@ def run(target: Target, store: Store, guards=("g0", "g1"), mutations=(), include
     elif attack_set == "heldout3":
         from ..attacks.heldout3 import load_heldout3
         base = load_heldout3()
+    elif attack_set == "generated":
+        from ..attacks.generate import load_generated
+        base = load_generated()
     else:
         base = load()
     attacks: list[Attack] = base + mutators.apply(base, list(mutations))
@@ -74,7 +86,7 @@ def run(target: Target, store: Store, guards=("g0", "g1"), mutations=(), include
         g = make_guard(gkey, store=store, tracker=tracker, client=guard_client)
         for a, benign in items:
             msgs = build_messages(a.text, a.document, list(a.history))
-            vin, g_in = _timed(g.check_input, a.text if not a.document else a.text + "\n" + a.document)
+            vin, g_in = _timed(g.check_input, guard_text(a, guard_context))
             blocked, by, resp, tin, tout, cost, cached, lat, g_out = bool(vin.blocked), "", "", 0, 0, 0.0, 0, None, 0.0
             if vin.blocked:
                 by, resp = f"input:{vin.reason}", BLOCK_MESSAGE

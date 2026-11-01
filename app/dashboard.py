@@ -285,3 +285,14 @@ with tab8:
         st.subheader("Where the detector is wrong")
         st.write(f"{int((e.error == 'false alarm').sum())} false alarms (harmless prompts blocked) and {int((e.error == 'missed attack').sum())} missed attacks across all test sets.")
         st.dataframe(e, hide_index=True)
+    rc = RES / "detector_roc.csv"
+    if rc.exists():
+        import altair as alt
+        r = pd.read_csv(rc)
+        st.subheader("Detector trade-off: move the blocking threshold")
+        ch = alt.Chart(r).mark_line(point=True).encode(
+            x=alt.X("harmless blocked %", title="Harmless prompts wrongly blocked (%)"),
+            y=alt.Y("attacks caught %", title="Attacks caught (%)", scale=alt.Scale(domain=[0, 100])),
+            color=alt.Color("set", title="Test set"), order="threshold", tooltip=["set", "threshold", "attacks caught %", "harmless blocked %"])
+        st.altair_chart(ch, use_container_width=True)
+        st.caption("Each dot is one threshold from 0.05 to 0.95; the detector blocks at 0.5. Top-left is best. Raising the threshold blocks fewer harmless prompts but misses more attacks, which is why the cascade asks Claude about the in-between scores.")

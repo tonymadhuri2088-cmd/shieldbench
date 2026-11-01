@@ -1,0 +1,4 @@
+guard,conversation attacks,"blocked, last message only","blocked, whole conversation",harmless conversations,"harmless blocked, last only","harmless blocked, whole conversation"
+g2_detector,6,3,6,8,1,7
+g3_claude,6,2,6,8,0,0
+g4_cascade,6,2,6,8,1,3

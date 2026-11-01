@@ -74,6 +74,8 @@ def test_texts() -> list[str]:
         from ..attacks.heldout import HELDOUT, HELDOUT_BENIGN
         from ..attacks.heldout2 import HELDOUT2, HELDOUT2_BENIGN
         from ..attacks.heldout3 import HELDOUT3, HELDOUT3_BENIGN
+        from ..attacks.generate import load_generated
+        texts += [a.text + (' ' + a.document if a.document else '') for a in load_generated()]
         texts += [a.text + (" " + a.document if a.document else "") for a in HELDOUT + HELDOUT2 + HELDOUT3] + HELDOUT_BENIGN + HELDOUT2_BENIGN + HELDOUT3_BENIGN
     except ImportError:
         pass

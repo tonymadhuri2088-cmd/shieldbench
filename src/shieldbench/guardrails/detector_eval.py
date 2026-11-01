@@ -31,6 +31,18 @@ def test_sets():
     }
 
 
+def roc_table(guard: DetectorGuard, sets=None, steps: int = 19) -> pd.DataFrame:
+    """For each blocking threshold from 0.05 to 0.95: share of attacks caught (recall) and share of harmless prompts wrongly blocked."""
+    rows = []
+    for name, (atk, ben) in (sets or test_sets()).items():
+        pa = np.array([guard.proba(t) for t in atk])
+        pb = np.array([guard.proba(t) for t in ben])
+        for thr in np.linspace(0.05, 0.95, steps):
+            rows.append({"set": name, "threshold": round(float(thr), 2), "attacks caught %": round(float((pa >= thr).mean()) * 100, 1),
+                         "harmless blocked %": round(float((pb >= thr).mean()) * 100, 1)})
+    return pd.DataFrame(rows)
+
+
 def ece(y, p, bins: int = 10) -> float:
     y, p = np.asarray(y), np.asarray(p)
     edges = np.linspace(0, 1, bins + 1)
@@ -64,7 +76,13 @@ def scorecard(guard: DetectorGuard, sets=None) -> pd.DataFrame:
 
 
 def main():
+    import sys
     g = DetectorGuard()
+    if "--roc" in sys.argv:
+        out = sys.argv[sys.argv.index("--roc") + 1]
+        roc_table(g).to_csv(out, index=False)
+        print("wrote", out)
+        return
     pd.set_option("display.width", 220)
     print(f"G2 detector at block threshold {g.threshold}; cascade allows <= {g.bundle.get('lo')} and blocks >= {g.bundle.get('hi')}\n")
     print(scorecard(g).to_string(index=False))

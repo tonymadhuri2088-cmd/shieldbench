@@ -47,7 +47,7 @@ flowchart LR
 - **Judges:** a rule judge (looks for canary strings) and a Claude judge (Sonnet, one rubric per category). The final verdict uses the Claude judge when it ran.
 - **Adaptive attacker:** a plain Python loop. A Claude Haiku attacker (local Ollama model as fallback if Claude refuses) writes a message, the message goes through the guard, the bot and the output guard, a deterministic canary check decides whether the goal was reached, and the reply is fed back for the next round (up to 6 rounds, 5 trials per goal, 4 goals: key, discount code, email, phone).
 - **Metrics:** attack success rate with Wilson intervals, over-refusal split into "guard blocked" and "bot refused", task success on clean documents, model latency vs guard overhead, a block breakdown, adaptive success and rounds to win.
-- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 50 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
+- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 54 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
 
 ## Judge validation
 
@@ -85,7 +85,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows;  source .venv/bin/activate on Linux/Mac
 pip install -r requirements.txt
 copy .env.example .env          # add your Anthropic key only if you use Claude
-pytest                          # 50 tests should pass
+pytest                          # 54 tests should pass
 ```
 Never commit `.env`; it is in `.gitignore`.
 
@@ -203,3 +203,34 @@ Input: regex rules (G1), trained detector (G2), Claude classifier (G3), cascade 
 - **Risk by category and severity:** `python -m shieldbench.report` and the dashboard Analysis tab show attack success per guard with an OWASP Top 10 for LLM Apps (2025) item and a severity. Severity is our own judgment, not a standard. ShieldBench covers 3 of the 10 items (LLM01 prompt injection, LLM02 sensitive information disclosure, LLM07 system prompt leakage); the other seven are not tested.
 - **Explainability:** `python -m shieldbench.guardrails.explain --text "..."` shows which pieces of text pushed the detector toward "attack"; `--errors --export results/detector_errors.csv` lists every false alarm and missed attack. The dashboard Analysis tab has a live version.
 - **Regression gate:** `python -m shieldbench.gate` fails (exit 1) if the cascade's attack success is above 5% or it blocks more than 10% of harmless prompts on `results/final_judged.csv`. It runs in GitHub Actions on every push. It checks the saved results; rerun the evaluation and commit new results to gate a model or prompt change.
+
+## Three target bots (same 124 attacks, 60 harmless prompts)
+| Guard | llama3.2 3B | Claude Haiku | qwen2.5 3B |
+|---|---|---|---|
+| none | 16.9% | 2.4% | 46.0% |
+| regex | 5.6% | 2.4% | 15.3% |
+| trained detector | 0% | 0% | 0% |
+| Claude guard | 0% | 0% | 0% |
+| cascade | 0% | 0% | 0% |
+Harmless prompts blocked on qwen: regex 8 of 60 (it also checks the reply), detector 9, Claude guard 0, cascade 3. Haiku resists on its own, so it is the weakest test of the guards; qwen is the strongest. With 124 attacks, 0% means the true rate is probably under about 3%. Results: `results/qwen_judged.csv` (pick it in the dashboard sidebar).
+
+## Known limitation: guards read one message at a time
+Every guard checks the newest message only, not the whole conversation. A step-by-step jailbreak whose last message looks innocent ("Great, now do step 3") can look harmless to a guard. The cascade still stopped all 40 jailbreaks in set 3, but part of the reason may be that the small bot did not comply with the vague last message either. Guarding the whole conversation is the next step.
+
+## Advanced additions (v0.29)
+- **Conversation-aware guards:** `python -m shieldbench.run ... --guard-context full` makes every input guard read the whole conversation instead of only the newest message. `python -m shieldbench.crescendo --guards g2,g3,g4` compares both modes on the 6 step-by-step jailbreaks of the jailbreak set (no bot needed).
+- **LLM-generated attack variants:** `python -m shieldbench.attacks.generate --per-seed 3 --db results/generated.db` asks Claude Haiku (the local model if Claude declines) to rewrite each seed attack in different ways, keeps only valid ones (markers kept, no copies), and saves `data/generated/variants.json`. Run it with `--attack-set generated`. The detector is never trained on these.
+- **Detector trade-off curve:** `python -m shieldbench.guardrails.detector_eval --roc results/detector_roc.csv` writes attacks caught vs harmless blocked for thresholds 0.05 to 0.95; the dashboard Analysis tab draws it.
+
+## Results on LLM-written variants (v0.31)
+60 attacks rewritten by Claude Haiku from the seed attacks (15 direct, 12 hidden-in-document, 12 jailbreak, 9 prompt-extraction, 12 personal-data), run against llama3.2:3b with 24 harmless prompts. Final verdict = Claude judge (100/114 agreement with the rule judge).
+
+| Guard | Attack success (60) | Harmless blocked (24) |
+|---|---|---|
+| G0 none | 36.7% | 0 |
+| G1 regex | 28.3% | 1 |
+| G2 detector | 0% | 1 |
+| G3 Claude | 0% | 0 |
+| G4 cascade | 0% | 0 |
+
+Per category with no guard: personal data 75%, direct 53%, indirect 17%, jailbreak 17%, extraction 11%. Zero means the true rate is probably under about 6% (95% upper bound ~6% overall), not that it is zero. Caveats: variants were written by Claude Haiku, the same family as the Claude guard; the detector was never trained on them; the harmless sample is small (24). The regex guard helps only on personal data (output filter) and did nothing on injections.

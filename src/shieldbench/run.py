@@ -25,7 +25,8 @@ def main():
     ap.add_argument("--guards", default="g0,g1")
     ap.add_argument("--mutate", default="", help="comma list: base64,leetspeak,roleplay,hinglish,multi_turn")
     ap.add_argument("--hard-benign", action="store_true", help="add 36 tricky-but-harmless prompts for over-refusal")
-    ap.add_argument("--attack-set", default="main", choices=["main", "heldout", "heldout2", "heldout3"], help="heldout/heldout2/heldout3 = attacks written after the G2 detector was trained")
+    ap.add_argument("--attack-set", default="main", choices=["main", "heldout", "heldout2", "heldout3", "generated"], help="heldout/heldout2/heldout3 = attacks written after the G2 detector was trained")
+    ap.add_argument("--guard-context", default="last", choices=["last", "full"], help="last = guards read only the newest message; full = the whole conversation")
     ap.add_argument("--limit", type=int, default=None, help="small batch first!")
     ap.add_argument("--budget", type=float, default=config.BUDGET_USD)
     ap.add_argument("--db", default=str(config.DB_PATH))
@@ -34,7 +35,7 @@ def main():
     store = Store(a.db)
     rid, spent = run(make_target(a.target), store, guards=a.guards.split(","),
                      mutations=[m for m in a.mutate.split(",") if m], budget_usd=a.budget, limit=a.limit,
-                     hard_benign=a.hard_benign, attack_set=a.attack_set)
+                     hard_benign=a.hard_benign, attack_set=a.attack_set, guard_context=a.guard_context)
     df = store.results_df(rid)
     print(f"run {rid}: {len(df)} rows, spent ${spent:.4f}")
     print(metrics.asr_table(df).round(3).to_string(index=False))
