@@ -47,7 +47,7 @@ flowchart LR
 - **Judges:** a rule judge (looks for canary strings) and a Claude judge (Sonnet, one rubric per category). The final verdict uses the Claude judge when it ran.
 - **Adaptive attacker:** a plain Python loop. A Claude Haiku attacker (local Ollama model as fallback if Claude refuses) writes a message, the message goes through the guard, the bot and the output guard, a deterministic canary check decides whether the goal was reached, and the reply is fed back for the next round (up to 6 rounds, 5 trials per goal, 4 goals: key, discount code, email, phone).
 - **Metrics:** attack success rate with Wilson intervals, over-refusal split into "guard blocked" and "bot refused", task success on clean documents, model latency vs guard overhead, a block breakdown, adaptive success and rounds to win.
-- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 43 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
+- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 47 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
 
 ## Judge validation
 
@@ -85,7 +85,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows;  source .venv/bin/activate on Linux/Mac
 pip install -r requirements.txt
 copy .env.example .env          # add your Anthropic key only if you use Claude
-pytest                          # 43 tests should pass
+pytest                          # 47 tests should pass
 ```
 Never commit `.env`; it is in `.gitignore`.
 
@@ -162,3 +162,28 @@ Same 124 attacks and 60 harmless prompts, bot = claude-haiku-5-5 (`results/haiku
 | detector, Claude guard, cascade | 0% | 0% |
 Harmless prompts blocked by the guard: detector 9 of 60, cascade 3 of 60, regex 1, Claude guard 0 (same as on the small local model).
 Honest reading: Haiku resists most attacks by itself, and the rule judge wrongly counted refusals that quote the attack word as leaks (13 cases, all overruled by the Claude judge). With so few attacks working on the unguarded bot, this run cannot show that the guards help; the llama3.2:3b target is the real test.
+
+## More upgrades (v0.23)
+- **Stronger, different attacker:** `python -m shieldbench.attacks.adaptive --attacker claude --attacker-model claude-sonnet-5-5 ...` (the Adaptive tab now shows each attacker side by side).
+- **XSTest over-refusal:** `python -m shieldbench.xstest --guards g1,g2,g3,g4 --export results/xstest.csv` runs 250 public harmless-but-risky-sounding prompts (XSTest, CC BY 4.0) through each guard.
+
+## Second human labeler (checklist C6)
+`python -m shieldbench.judge.label xlsx` makes an Excel sheet (blind: no judge verdicts) for a friend to fill with 0/1.
+`python -m shieldbench.judge.label fromxlsx --xlsx data\labels\label_sheet_friend.xlsx` turns it back into a CSV, then
+`python -m shieldbench.judge.label kappa --a data\labels\human_labels3.csv --b data\labels\labels_friend.csv` prints human-vs-human agreement and each judge against the humans.
+
+## Jailbreak set (v0.25)
+`python -m shieldbench.run --target ollama --guards g0,g1,g2,g3,g4 --attack-set heldout3 --db results/heldout3.db` runs 40 fresh jailbreaks in 8 well-known styles (DAN-style personas, fiction wrapper, refusal suppression, payload splitting, fake authority, reverse psychology, step-by-step crescendo, framing tricks) plus 20 harmless prompts. Written after the detector was trained; run once, never trained on.
+
+### Jailbreak set results (40 jailbreaks, 20 harmless, small local bot)
+| Guard | Jailbreaks that worked | Harmless prompts blocked |
+|---|---|---|
+| none | 32.5% (13 of 40) | 0 of 20 |
+| regex | 32.5% | 1 of 20 |
+| trained detector | 5% (2 of 40) | 9 of 20 |
+| Claude guard | 0% | 1 of 20 |
+| cascade | 0% | 1 of 20 |
+The detector alone over-blocks harmless role-play prompts; the cascade sends those to Claude. Claude was asked on 45% of requests here (about 10% on the main set).
+
+### Stronger attacker (Claude Sonnet, 20 episodes per guard)
+none 95% (19 of 20), regex 45% (9 of 20), detector, Claude guard and cascade 0 of 20 (true rate up to about 16%). Sonnet and the Claude guard are both Anthropic models.

@@ -145,3 +145,14 @@ def adaptive_table(ep):
                      "mean_rounds_to_win": float(won["rounds"].mean()) if len(won) else float("nan"),
                      "attacker_refusals": int(grp["refused_rounds"].sum()), "cost_per_episode_usd": float(grp["cost_usd"].mean())})
     return pd.DataFrame(rows)
+
+
+def adaptive_by_attacker(ep):
+    """Adaptive results per attacker model and guard (so a stronger attacker is shown next to the first one)."""
+    import pandas as pd
+    parts = []
+    for a, grp in ep.groupby("attacker"):
+        t = adaptive_table(grp)
+        t.insert(0, "attacker", a)
+        parts.append(t)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()

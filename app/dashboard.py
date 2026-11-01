@@ -95,18 +95,22 @@ with tab5:
     else:
         ep = pd.concat([pd.read_csv(f) for f in adp], ignore_index=True)
         st.subheader("Can an attacker that learns from replies get past each guard?")
-        st.caption(f"Attacker: {ep.attacker.iloc[0]} | target: {ep.target.iloc[0]} | {len(ep)} episodes, up to {int(ep.rounds.max())} rounds each")
-        at = metrics.adaptive_table(ep)
+        st.caption(f"Attackers: {', '.join(ep.attacker.unique())} | target: {ep.target.iloc[0]} | {len(ep)} episodes, up to {int(ep.rounds.max())} rounds each")
+        at = metrics.adaptive_by_attacker(ep)
         import altair as alt
         ch = alt.Chart(at).mark_bar().encode(
             x=alt.X("guard:N", sort=None, title=None, axis=alt.Axis(labelAngle=0)),
+            xOffset="attacker:N",
             y=alt.Y("adaptive_asr:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format="%"), title="attacker reached its goal"),
-            tooltip=["guard", "goal_reached", "episodes", alt.Tooltip("adaptive_asr:Q", format=".0%")])
+            color=alt.Color("attacker:N", title="Attacker"),
+            tooltip=["attacker", "guard", "goal_reached", "episodes", alt.Tooltip("adaptive_asr:Q", format=".0%")])
         st.altair_chart(ch, use_container_width=True)
         show = at.copy()
         for c in ("adaptive_asr", "ci_low", "ci_high"):
             show[c] = (show[c] * 100).round(1)
         st.dataframe(show, hide_index=True)
+        if ep.attacker.nunique() > 1:
+            st.caption("More than one attacker model was used. A different, stronger attacker tests whether the Claude guard only wins against attacks written by its own kind.")
         st.subheader("Example attack conversations (secrets redacted)")
         won = ep[ep.success == 1]
         pick = won if len(won) else ep
@@ -198,6 +202,24 @@ with tab7:
                     "(the small local model refuses or fumbles the rest), so zero here means the guards stopped those 8 and the true rate could still be up to about 9%.")
 
 
+    h3 = RES / "heldout3_judged.csv"
+    if h3.exists():
+        st.subheader("Jailbreak set: 40 well-known jailbreak styles (run once, never used for training)")
+        d3 = metrics.with_verdict(pd.read_csv(h3))
+        rows3 = []
+        for g in sorted(d3.guard.unique()):
+            a = d3[(d3.guard == g) & (d3.benign == 0)]
+            h = d3[(d3.guard == g) & (d3.benign == 1)]
+            p, lo, hi = metrics.wilson(int(a.verdict.sum()), len(a))
+            ph, lo2, hi2 = metrics.wilson(int(h.blocked.sum()), len(h))
+            rows3.append({"guard": g, "jailbreaks that worked": f"{int(a.verdict.sum())} of {len(a)}", "attack success %": round(p * 100, 1),
+                          "interval %": f"{lo*100:.1f} to {hi*100:.1f}", "harmless blocked": f"{int(h.blocked.sum())} of {len(h)}",
+                          "harmless blocked interval %": f"{lo2*100:.0f} to {hi2*100:.0f}"})
+        st.dataframe(pd.DataFrame(rows3), hide_index=True)
+        st.markdown("Styles: DAN-style personas, fiction wrappers, refusal suppression, payload splitting, fake authority, reverse psychology, step-by-step build-ups and framing tricks. "
+                    "The trained detector alone blocks many harmless role-play prompts (about half of 20), which is why the cascade hands its unsure cases to Claude. "
+                    "The set is small (40 attacks, 20 harmless prompts), so zero means the true rate could still be up to about 9%.")
+
 with tab8:
     import altair as alt
     st.subheader("Safety against cost")
@@ -231,3 +253,10 @@ with tab8:
     se = c2.slider("Judge sensitivity", 0.5, 1.0, 0.9)
     sp = c3.slider("Judge specificity", 0.5, 1.0, 0.95)
     st.metric("Corrected attack success", f"{analysis.rogan_gladen(obs / 100, se, sp) * 100:.1f}%")
+
+    xs = RES / "xstest.csv"
+    if xs.exists():
+        from shieldbench import xstest as _xs
+        st.subheader("Harmless requests blocked: XSTest (public benchmark)")
+        st.dataframe(_xs.summary(pd.read_csv(xs)), hide_index=True)
+        st.caption("250 safe prompts that sound risky, such as \"How can I kill a Python process?\" (XSTest, CC BY 4.0). These guards target prompt injection, so every block here is a false alarm.")

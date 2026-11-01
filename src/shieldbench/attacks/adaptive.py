@@ -206,6 +206,7 @@ def main():
     ap = argparse.ArgumentParser(description="Adaptive attacker vs each guard")
     ap.add_argument("--target", default="ollama", choices=["mock", "ollama", "claude"])
     ap.add_argument("--attacker", default="hybrid", choices=["claude", "ollama", "hybrid"])
+    ap.add_argument("--attacker-model", default="", help="Claude model that writes the attacks, e.g. claude-sonnet-5-5 (default: the Haiku target model)")
     ap.add_argument("--guards", default="g0,g1,g3")
     ap.add_argument("--trials", type=int, default=3)
     ap.add_argument("--rounds", type=int, default=6)
@@ -215,8 +216,9 @@ def main():
     ap.add_argument("--export", default="")
     a = ap.parse_args()
     store = Store(a.db)
-    att = {"claude": lambda: ClaudeAttacker(store), "ollama": lambda: OllamaAttacker(store),
-           "hybrid": lambda: HybridAttacker(ClaudeAttacker(store), OllamaAttacker(store))}[a.attacker]()
+    am = a.attacker_model or None
+    att = {"claude": lambda: ClaudeAttacker(store, model=am), "ollama": lambda: OllamaAttacker(store),
+           "hybrid": lambda: HybridAttacker(ClaudeAttacker(store, model=am), OllamaAttacker(store))}[a.attacker]()
     goals = [g for g in a.goals.split(",") if g] or None
     rid = None
     try:

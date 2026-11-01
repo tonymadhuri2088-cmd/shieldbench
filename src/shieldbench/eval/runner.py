@@ -48,15 +48,20 @@ def run(target: Target, store: Store, guards=("g0", "g1"), mutations=(), include
     elif attack_set == "heldout2":
         from ..attacks.heldout2 import load_heldout2
         base = load_heldout2()
+    elif attack_set == "heldout3":
+        from ..attacks.heldout3 import load_heldout3
+        base = load_heldout3()
     else:
         base = load()
     attacks: list[Attack] = base + mutators.apply(base, list(mutations))
     if limit:
         attacks = attacks[:limit]
     items = [(a, False) for a in attacks]
-    if attack_set in ("heldout", "heldout2"):
+    if attack_set in ("heldout", "heldout2", "heldout3"):
         if attack_set == "heldout":
             from ..attacks.heldout import HELDOUT_BENIGN as _hb
+        elif attack_set == "heldout3":
+            from ..attacks.heldout3 import HELDOUT3_BENIGN as _hb
         else:
             from ..attacks.heldout2 import HELDOUT2_BENIGN as _hb
         items += [(Attack(id=f"hdb-{i:02d}", category="benign_heldout", family="benign_heldout", text=t), True) for i, t in enumerate(_hb)]

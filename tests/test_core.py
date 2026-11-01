@@ -495,3 +495,62 @@ def test_analysis_tables_and_datasheet():
     assert len(pairwise_tests(d)) >= 1
     s = build()
     assert "content hash" in s and "Known limits" in s
+
+
+def test_xstest_loader_and_regex_run(tmp_path):
+    from shieldbench.store.db import Store
+    from shieldbench import xstest
+    safe = xstest.load_safe()
+    assert len(safe) == 250 and set(safe.label) == {"safe"}
+    df, spent = xstest.run(["g1"], Store(str(tmp_path / "x.db")), limit=30)
+    assert len(df) == 30 and spent == 0
+    s = xstest.summary(df)
+    assert int(s["safe prompts"].iloc[0]) == 30
+
+
+def test_adaptive_by_attacker_and_cli_flag():
+    import pandas as pd
+    from shieldbench.eval import metrics
+    ep = pd.DataFrame({"attacker": ["a"] * 4 + ["b"] * 4, "guard": ["g0", "g0", "g3", "g3"] * 2,
+                       "success": [1, 1, 0, 0, 1, 0, 0, 0], "rounds": [2] * 8, "refused_rounds": [0] * 8, "cost_usd": [0.0] * 8})
+    t = metrics.adaptive_by_attacker(ep)
+    assert set(t.attacker) == {"a", "b"} and len(t) == 4
+    import subprocess, sys
+    out = subprocess.run([sys.executable, "-m", "shieldbench.attacks.adaptive", "--help"], capture_output=True, text=True,
+                         cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]), env={**__import__("os").environ, "PYTHONPATH": "src"})
+    assert "--attacker-model" in out.stdout
+
+
+def test_label_xlsx_roundtrip(tmp_path):
+    import pandas as pd
+    import pytest
+    pytest.importorskip("openpyxl")
+    from shieldbench.judge.label import from_xlsx, to_xlsx
+    sheet = tmp_path / "s.csv"
+    pd.DataFrame({"item_id": ["L001", "L002"], "category": ["jailbreak"] * 2, "success_means": ["x"] * 2,
+                  "attack": ["a", "b"], "bot_response": ["r1", "r2"], "label": ["", ""]}).to_csv(sheet, index=False)
+    x = tmp_path / "f.xlsx"
+    to_xlsx(str(sheet), str(x))
+    import openpyxl
+    wb = openpyxl.load_workbook(x)
+    wb.active["F3"], wb.active["F4"] = 1, 0
+    wb.save(x)
+    from_xlsx(str(x), str(tmp_path / "o.csv"))
+    o = pd.read_csv(tmp_path / "o.csv")
+    assert list(o.item_id) == ["L001", "L002"] and list(o.label) == [1, 0]
+
+
+def test_heldout3_jailbreaks_shape_and_mock_run(tmp_path):
+    from shieldbench.attacks.heldout import HELDOUT
+    from shieldbench.attacks.heldout2 import HELDOUT2
+    from shieldbench.attacks.heldout3 import HELDOUT3, HELDOUT3_BENIGN
+    from shieldbench.attacks.mutators import resolve
+    from shieldbench.eval.runner import run
+    from shieldbench.store.db import Store
+    from shieldbench.targets.mock_target import MockTarget
+    assert len(HELDOUT3) == 40 and len(HELDOUT3_BENIGN) == 20 and len({a.id for a in HELDOUT3}) == 40
+    assert all(a.category == "jailbreak" and a.marker == "REFUND APPROVED" for a in HELDOUT3)
+    assert not ({a.text for a in HELDOUT3} & ({a.text for a in HELDOUT} | {a.text for a in HELDOUT2}))
+    assert all(resolve(a.id).text == a.text for a in HELDOUT3)
+    rid, _ = run(MockTarget(), Store(str(tmp_path / "h3.db")), guards=("g0", "g1"), attack_set="heldout3")
+    assert len(Store(str(tmp_path / "h3.db")).results_df(rid)) == 2 * 60
