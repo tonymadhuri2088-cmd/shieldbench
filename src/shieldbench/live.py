@@ -153,8 +153,9 @@ def _sse(completion: dict) -> bytes:
     return ("".join("data: " + json.dumps(x, ensure_ascii=False) + "\n\n" for x in (a, b)) + "data: [DONE]\n\n").encode()
 
 
-def serve(p: Protector, port: int, site: str | None = None, target: str = "none"):
-    """Local web server (one request at a time, so the SQLite cache is only ever used from one thread): the JSON API for the live demo and, with `site`, the web page itself (same address, so no browser permission problems).
+def serve(p: Protector, port: int, site: str | None = None, target: str = "none", host: str = "127.0.0.1", api_key: str | None = None):
+    """Web server (v0.39: handles requests in threads; a lock keeps the shared SQLite cache and the chat history safe; long scans with g1/g2 and gateway calls with g0-g2 do not wait for it).
+    With api_key set, every /api/* (except /api/health) and /v1/* call needs the header  Authorization: Bearer <key>,  and each caller is limited to 120 calls a minute. Binding to any host other than 127.0.0.1 REQUIRES a key. the JSON API for the live demo and, with `site`, the web page itself (same address, so no browser permission problems).
     GET  /api/health                      what is available
     POST /api/check  {"message", "guard"?, "reset"?}                 guard decision (guards g0..g4; g3/g4 need ANTHROPIC_API_KEY)
     POST /api/scan   {"base_url","model","key"?,"system_prompt"?,"guards"?}   attack YOUR OWN chatbot (any OpenAI-format server) and score the guards on its replies
@@ -163,8 +164,15 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
     POST /v1/chat/completions   the GATEWAY: OpenAI-compatible, so any app or OpenAI client can point at http://127.0.0.1:PORT/v1
                                 (guard from the X-Shieldbench-Guard header or the server default; stream=true works; blocked -> finish_reason content_filter)
     GET  /v1/models  one entry, so clients that list models do not fail"""
-    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import hmac
     import mimetypes
+    import threading
+    from contextlib import nullcontext
+    if host not in ("127.0.0.1", "localhost", "::1") and not api_key:
+        raise SystemExit("Refusing to listen on " + host + " without an API key. Set SHIELDBENCH_KEY (any long random string) first.")
+    lock = threading.RLock()
+    hits: dict = {}
     guards = {p.guard.name.split("_")[0]: p}
     root = Path(site).resolve() if site else None
     agent_ctx = {}
@@ -216,6 +224,25 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
             self.end_headers()
             self.wfile.write(b)
 
+        def _allowed(self) -> bool:
+            """True if no key is configured, or the caller sent the right one and is under the rate limit. Sends the error itself."""
+            if not api_key:
+                return True
+            auth = self.headers.get("Authorization", "")
+            tok = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+            if not hmac.compare_digest(tok.encode(), api_key.encode()):
+                self._send(401, {"error": {"message": "missing or wrong API key (send Authorization: Bearer <key>)", "type": "authentication_error"}})
+                return False
+            now = time.time()
+            q = [t for t in hits.get(tok, []) if now - t < 60]
+            if len(q) >= 120:
+                hits[tok] = q
+                self._send(429, {"error": {"message": "rate limit: 120 requests a minute", "type": "rate_limit_error"}})
+                return False
+            q.append(now)
+            hits[tok] = q
+            return True
+
         def _gateway(self, body):
             try:
                 q = get_protector(self.headers.get("X-Shieldbench-Guard", "").strip())
@@ -249,6 +276,8 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
             if path == "/api/health":
                 return self._send(200, {"ok": True, "service": "shieldbench-live", "default_guard": p.guard.name, "bot": target,
                                         "agent": target not in ("none", ""), "guards": ["g0", "g1", "g2", "g3", "g4"]})
+            if (path.startswith("/api/") or path.startswith("/v1/") or path == "/models") and not self._allowed():
+                return
             if path in ("/v1/models", "/models"):
                 return self._send(200, {"object": "list", "data": [{"id": "shieldbench-gateway", "object": "model", "owned_by": "shieldbench"}]})
             if root is not None and not path.startswith("/api/"):
@@ -268,22 +297,31 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
         def do_POST(self):
             path = self.path.split("?")[0]
             try:
+                if not self._allowed():
+                    return
                 n = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(n) or b"{}")
+                cheap = ("g0", "g1", "g2")
                 if path in ("/v1/chat/completions", "/chat/completions"):
-                    return self._gateway(body)
+                    gk = self.headers.get("X-Shieldbench-Guard", "").strip() or p.guard.name.split("_")[0]
+                    with (nullcontext() if gk in cheap else lock):
+                        return self._gateway(body)
                 if path == "/api/scan":
-                    return self._send(200, scan_run(body))
+                    ks = [k for k in (body.get("guards") or ["g1", "g2"])]
+                    with (nullcontext() if all(k in ("g1", "g2") for k in ks) else lock):
+                        return self._send(200, scan_run(body))
                 msg = str(body.get("message", ""))
                 if not msg.strip():
                     return self._send(400, {"error": "message is empty"})
                 if path == "/api/agent":
-                    return self._send(200, agent_run(body))
+                    with lock:
+                        return self._send(200, agent_run(body))
                 if path in ("/check", "/api/check"):
-                    q = get_protector(str(body.get("guard", "")))
-                    if body.get("reset"):
-                        q.reset()
-                    return self._send(200, asdict(q.handle(msg)))
+                    with lock:
+                        q = get_protector(str(body.get("guard", "")))
+                        if body.get("reset"):
+                            q.reset()
+                        return self._send(200, asdict(q.handle(msg)))
                 self._send(404, {"error": "unknown path"})
             except RuntimeError as e:
                 self._send(503, {"error": str(e)})
@@ -296,9 +334,11 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
             pass
 
     where = f" and the site from {site}" if site else ""
-    print(f"ShieldBench live on http://127.0.0.1:{port}/  (API at /api/check{where}; default guard {p.guard.name}; bot: {target}). Ctrl+C to stop.")
-    print(f"Gateway: point any OpenAI client at http://127.0.0.1:{port}/v1  (no login, this computer only)")
-    HTTPServer(("127.0.0.1", port), H).serve_forever()
+    print(f"ShieldBench live on http://{host}:{port}/  (API at /api/check{where}; default guard {p.guard.name}; bot: {target}). Ctrl+C to stop.")
+    print(f"Gateway: point any OpenAI client at http://127.0.0.1:{port}/v1  (" + ("API key required" if api_key else "no login, this computer only") + ")")
+    srv = ThreadingHTTPServer((host, port), H)
+    srv.daemon_threads = True
+    srv.serve_forever()
 
 
 def main():
@@ -308,11 +348,13 @@ def main():
     ap.add_argument("--context", default="last", choices=["last", "full"])
     ap.add_argument("--serve", type=int, default=0, help="start the local web server on this port")
     ap.add_argument("--site", default=None, help="folder with the web page to serve at / (use docs)")
+    ap.add_argument("--host", default="127.0.0.1", help="address to listen on; anything but 127.0.0.1 needs SHIELDBENCH_KEY (use 0.0.0.0 in Docker)")
     ap.add_argument("--log", default=None, help="append decisions to this .jsonl file")
     a = ap.parse_args()
     p = Protector(a.guard, a.target, a.context, log=a.log)
     if a.serve:
-        return serve(p, a.serve, a.site, a.target)
+        import os
+        return serve(p, a.serve, a.site, a.target, a.host, os.environ.get("SHIELDBENCH_KEY") or None)
     print(f"Live chat, guard {p.guard.name}, bot {a.target}. Type a message; 'quit' to stop.")
     while True:
         try:

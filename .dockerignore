@@ -1,0 +1,7 @@
+.venv
+.git
+.env
+*.db
+results/
+__pycache__
+cloudflared.exe

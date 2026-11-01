@@ -315,3 +315,11 @@ Limits: 22 attacks and no disguises, so a small sample; key-leak and data-leak a
 
 ### Another model family (cross-model check)
 `python -m shieldbench.byobot --model gemma2:2b --disguises --guards g1,g2,g4` scans one model, saves the report to `results/crossmodel.json` (one entry per model), and `python -m shieldbench.export_site` puts it on the Results page under "Another model family". It addresses the limit that the guards were developed against Claude-written text; it is still a small sample judged by the rule judge.
+
+## v0.39: Gateway hardening (work toward a real service)
+
+- **Threads:** the server now handles several requests at once. A lock still protects the shared SQLite cache and the chat history, but long scans that use only the regex and detector guards, and gateway calls with guards g0 to g2, do not wait for it.
+- **API key:** set `SHIELDBENCH_KEY` to any long random string and every `/api/*` (except `/api/health`) and `/v1/*` call needs `Authorization: Bearer <key>`. Each caller is limited to 120 calls a minute. Listening on any address other than 127.0.0.1 (`--host 0.0.0.0`) is refused unless a key is set.
+- **Docker:** `docker build -t shieldbench .` then `docker run -p 8765:8765 -e SHIELDBENCH_KEY=<key> shieldbench`. The Dockerfile has not been built or run by the author yet. It needs `data/models/g2.joblib` in the build folder.
+
+Still not done: real streaming, HTTPS (put it behind a proxy such as Caddy or a cloud load balancer), per-user keys, a monitoring dashboard, a database that scales beyond SQLite.

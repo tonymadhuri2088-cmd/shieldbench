@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS adaptive_episodes (
 class Store:
     def __init__(self, path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.con = sqlite3.connect(str(path))
+        self.con = sqlite3.connect(str(path), check_same_thread=False)   # the live server serialises DB use with a lock
         self.con.executescript(SCHEMA)
         have = {r[1] for r in self.con.execute("PRAGMA table_info(results)")}
         for col, typ in (("attack_text", "TEXT"), ("judge_llm", "INT"), ("judge_llm_reason", "TEXT")):
