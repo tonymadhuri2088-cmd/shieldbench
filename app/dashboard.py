@@ -96,7 +96,12 @@ with tab5:
         st.subheader("Can an attacker that learns from replies get past each guard?")
         st.caption(f"Attacker: {ep.attacker.iloc[0]} | target: {ep.target.iloc[0]} | {len(ep)} episodes, up to {int(ep.rounds.max())} rounds each")
         at = metrics.adaptive_table(ep)
-        st.bar_chart(at.set_index("guard")["adaptive_asr"])
+        import altair as alt
+        ch = alt.Chart(at).mark_bar().encode(
+            x=alt.X("guard:N", sort=None, title=None, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("adaptive_asr:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format="%"), title="attacker reached its goal"),
+            tooltip=["guard", "goal_reached", "episodes", alt.Tooltip("adaptive_asr:Q", format=".0%")])
+        st.altair_chart(ch, use_container_width=True)
         show = at.copy()
         for c in ("adaptive_asr", "ci_low", "ci_high"):
             show[c] = (show[c] * 100).round(1)
