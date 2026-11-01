@@ -1,11 +1,11 @@
-# ShieldBench datasheet (code version 0.1.0)
+# ShieldBench datasheet (code version 0.22)
 
 A fake support bot (AcmeBot) with fake secrets. Nothing here touches a real system.
 
 ## What was tested
 | set | attacks | harmless | content hash |
 |---|---|---|---|
-| main (5 disguises added at run time) | 22 seeds | 48 | ce1066da9e9948ef |
+| main (5 disguises added at run time) | 22 seeds (124 with disguises) | 60 | c4f67ee72d947614 |
 | unseen set 1 (tuning set) | 40 | 20 | e25f1d813ade746b |
 | unseen set 2 (untouched, run once) | 40 | 20 | 518f0daa9958721b |
 
