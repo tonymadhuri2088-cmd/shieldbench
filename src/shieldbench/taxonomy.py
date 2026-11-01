@@ -16,7 +16,7 @@ SEVERITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 OWASP_2025 = [
     ("LLM01", "Prompt Injection", True), ("LLM02", "Sensitive Information Disclosure", True),
     ("LLM03", "Supply Chain", False), ("LLM04", "Data and Model Poisoning", False),
-    ("LLM05", "Improper Output Handling", False), ("LLM06", "Excessive Agency", False),
+    ("LLM05", "Improper Output Handling", False), ("LLM06", "Excessive Agency", True),
     ("LLM07", "System Prompt Leakage", True), ("LLM08", "Vector and Embedding Weaknesses", False),
     ("LLM09", "Misinformation", False), ("LLM10", "Unbounded Consumption", False),
 ]

@@ -62,9 +62,10 @@ def resolve(attack_id: str) -> Attack:
     from .heldout import HELDOUT
     from .heldout2 import HELDOUT2
     from .heldout3 import HELDOUT3
+    from .heldout4 import HELDOUT4
     from .generate import load_generated
     from .library import controls
     base_id, _, mut = attack_id.partition("~")
-    pool = {a.id: a for a in load() + controls() + HELDOUT + HELDOUT2 + HELDOUT3 + load_generated()}
+    pool = {a.id: a for a in load() + controls() + HELDOUT + HELDOUT2 + HELDOUT3 + HELDOUT4 + load_generated()}
     base = pool[base_id]
     return MUTATORS[mut](base) if mut else base

@@ -19,6 +19,7 @@ def build(csv: str | None = None) -> str:
     from .attacks.heldout import HELDOUT, HELDOUT_BENIGN
     from .attacks.heldout2 import HELDOUT2, HELDOUT2_BENIGN
     from .attacks.heldout3 import HELDOUT3, HELDOUT3_BENIGN
+    from .attacks.heldout4 import HELDOUT4, HELDOUT4_BENIGN
     from .attacks.library import ATTACKS, BENIGN, BENIGN_HARD, controls
     t = lambda a: a.text + (a.document or "")
     tr = config.ROOT / "data" / "train" / "train.csv"
@@ -30,7 +31,8 @@ def build(csv: str | None = None) -> str:
          f"| main (5 disguises added at run time) | {len(ATTACKS)} seeds (124 with disguises) | {len(BENIGN) + len(BENIGN_HARD) + len(controls())} | {_h([t(a) for a in ATTACKS] + list(BENIGN) + list(BENIGN_HARD) + [t(c) for c in controls()])} |",
          f"| unseen set 1 (tuning set) | {len(HELDOUT)} | {len(HELDOUT_BENIGN)} | {_h([t(a) for a in HELDOUT] + list(HELDOUT_BENIGN))} |",
          f"| unseen set 2 (untouched, run once) | {len(HELDOUT2)} | {len(HELDOUT2_BENIGN)} | {_h([t(a) for a in HELDOUT2] + list(HELDOUT2_BENIGN))} |",
-         f"| jailbreak set 3 (untouched, run once) | {len(HELDOUT3)} | {len(HELDOUT3_BENIGN)} | {_h([t(a) for a in HELDOUT3] + list(HELDOUT3_BENIGN))} |", "",
+         f"| jailbreak set 3 (untouched, run once) | {len(HELDOUT3)} | {len(HELDOUT3_BENIGN)} | {_h([t(a) for a in HELDOUT3] + list(HELDOUT3_BENIGN))} |",
+         f"| advanced jailbreak set 4 (untouched, run once) | {len(HELDOUT4)} | {len(HELDOUT4_BENIGN)} | {_h([t(a) for a in HELDOUT4] + list(HELDOUT4_BENIGN))} |", "",
          "## Detector (G2)", f"- training file hash: {fh(tr)}", f"- model file hash: {fh(mdl)}", "- features: character 2-5 grams and word 1-2 grams; logistic regression, class weights balanced", ""]
     if csv and Path(csv).exists():
         import pandas as pd

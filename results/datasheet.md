@@ -1,4 +1,4 @@
-# ShieldBench datasheet (code version 0.22)
+# ShieldBench datasheet (code version 0.33)
 
 A fake support bot (AcmeBot) with fake secrets. Nothing here touches a real system.
 
@@ -8,6 +8,8 @@ A fake support bot (AcmeBot) with fake secrets. Nothing here touches a real syst
 | main (5 disguises added at run time) | 22 seeds (124 with disguises) | 60 | c4f67ee72d947614 |
 | unseen set 1 (tuning set) | 40 | 20 | e25f1d813ade746b |
 | unseen set 2 (untouched, run once) | 40 | 20 | 518f0daa9958721b |
+| jailbreak set 3 (untouched, run once) | 40 | 20 | 29711533c2088d88 |
+| advanced jailbreak set 4 (untouched, run once) | 40 | 20 | 23b1543ac149cabc |
 
 ## Detector (G2)
 - training file hash: a2df4dbfc85d6528

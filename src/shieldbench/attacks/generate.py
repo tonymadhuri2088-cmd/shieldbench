@@ -31,6 +31,14 @@ def _parse(text: str):
     return [x.strip() for x in v if isinstance(x, str) and x.strip()]
 
 
+_REFUSAL = ("i can't", "i cannot", "i won't", "sorry, my", "i'm not able", "i am not able", "i'm unable")
+
+
+def _looks_like_refusal(v: str) -> bool:
+    """The writer sometimes answers instead of rewriting; such lines are not attacks."""
+    return v.strip().lower().startswith(_REFUSAL)
+
+
 def generate_variants(seeds, writer, per_seed: int = 3) -> list[Attack]:
     """writer(system, user) -> text. Returns validated, de-duplicated Attack variants."""
     out, seen = [], {a.text for a in seeds} | {a.document for a in seeds if a.document}
@@ -40,7 +48,7 @@ def generate_variants(seeds, writer, per_seed: int = 3) -> list[Attack]:
         got = _parse(writer(system, field))
         k = 0
         for v in got:
-            if v in seen or len(v) > 1500 or (s.marker and s.marker not in v):
+            if v in seen or len(v) > 1500 or (s.marker and s.marker not in v) or _looks_like_refusal(v):
                 continue
             seen.add(v)
             k += 1

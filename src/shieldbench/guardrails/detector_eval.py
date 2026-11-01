@@ -10,6 +10,7 @@ from ..attacks import mutators
 from ..attacks.heldout import HELDOUT, HELDOUT_BENIGN
 from ..attacks.heldout2 import HELDOUT2, HELDOUT2_BENIGN
 from ..attacks.heldout3 import HELDOUT3, HELDOUT3_BENIGN
+from ..attacks.heldout4 import HELDOUT4, HELDOUT4_BENIGN
 from ..attacks.library import ATTACKS, BENIGN, BENIGN_HARD, controls
 from .detector_guard import DetectorGuard
 
@@ -28,6 +29,7 @@ def test_sets():
         "unseen set 1 (tuned on)": ([_text(a) for a in HELDOUT], list(HELDOUT_BENIGN)),
         "unseen set 2 (untouched)": ([_text(a) for a in HELDOUT2], list(HELDOUT2_BENIGN)),
         "jailbreak set 3 (untouched)": ([_text(a) for a in HELDOUT3], list(HELDOUT3_BENIGN)),
+        "advanced jailbreak set 4 (untouched)": ([_text(a) for a in HELDOUT4], list(HELDOUT4_BENIGN)),
     }
 
 

@@ -25,7 +25,7 @@ def main():
     ap.add_argument("--guards", default="g0,g1")
     ap.add_argument("--mutate", default="", help="comma list: base64,leetspeak,roleplay,hinglish,multi_turn")
     ap.add_argument("--hard-benign", action="store_true", help="add 36 tricky-but-harmless prompts for over-refusal")
-    ap.add_argument("--attack-set", default="main", choices=["main", "heldout", "heldout2", "heldout3", "generated"], help="heldout/heldout2/heldout3 = attacks written after the G2 detector was trained")
+    ap.add_argument("--attack-set", default="main", choices=["main", "heldout", "heldout2", "heldout3", "heldout4", "generated"], help="heldout/heldout2/heldout3/heldout4 = attacks written after the G2 detector was trained")
     ap.add_argument("--guard-context", default="last", choices=["last", "full"], help="last = guards read only the newest message; full = the whole conversation")
     ap.add_argument("--limit", type=int, default=None, help="small batch first!")
     ap.add_argument("--budget", type=float, default=config.BUDGET_USD)
