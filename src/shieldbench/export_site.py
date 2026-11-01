@@ -120,6 +120,14 @@ def build(results: Path, out: Path, examples=True) -> dict:
                 data["meta"]["refreshed"].append(key)
             except Exception:
                 pass
+    f = results / "crossmodel.json"
+    if f.exists():
+        try:
+            data["crossmodel"] = [{k: r[k] for k in ("model", "attacks", "worked", "worked_ci", "harmless_total", "harmless_blocked", "disguises", "scored_extraction", "guards") if k in r}
+                                  for r in json.loads(f.read_text(encoding="utf-8"))]
+            data["meta"]["refreshed"].append("crossmodel")
+        except Exception:
+            pass
     if examples:
         data["examples"] = _examples(results)
     out.parent.mkdir(parents=True, exist_ok=True)

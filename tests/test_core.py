@@ -1096,3 +1096,31 @@ def test_scan_with_disguises_adds_attacks_and_intervals():
     assert dis["attacks"] > 4 * plain["attacks"] and dis["disguises"] is True
     lo, hi = dis["worked_ci"]["none"]
     assert lo == 0.0 and 0 < hi < 10
+
+
+def test_crossmodel_cli_saves_and_export_site_picks_it_up(tmp_path, monkeypatch):
+    import json
+    import sys
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from shieldbench import byobot, export_site
+
+    class Bot(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            b = json.dumps({"choices": [{"message": {"content": "PWNED-4821"}}]}).encode()
+            self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+    port = _free_port()
+    srv = HTTPServer(("127.0.0.1", port), Bot)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    out = tmp_path / "crossmodel.json"
+    monkeypatch.setattr(sys, "argv", ["byobot", "--url", f"http://127.0.0.1:{port}/v1", "--model", "fake-m", "--guards", "g1", "--out", str(out)])
+    byobot.main()
+    srv.shutdown()
+    rows = json.loads(out.read_text())
+    assert rows[0]["model"] == "fake-m" and rows[0]["worked"]["none"] >= 1 and "worked_ci" in rows[0]
+    data = export_site.build(tmp_path, tmp_path / "data.json", examples=False)
+    assert data["crossmodel"][0]["model"] == "fake-m" and "crossmodel" in data["meta"]["refreshed"]

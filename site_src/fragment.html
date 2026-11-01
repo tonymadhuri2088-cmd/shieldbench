@@ -186,6 +186,10 @@ footer .who{display:flex;align-items:center;gap:10px;color:var(--fg)} footer .wh
     <div id="tradeoff" class="scroll"></div>
     <p class="small muted" id="tradeoff-note" style="margin-top:8px"></p></div>
 
+  <div class="block" id="cross-block" hidden><header><h2>Another model family</h2><p class="muted">The same attacks and the same guards, run against a bot built on a different model family than the one the guards were developed against. Each cell is attacks that worked, out of the total, with the 95% range.</p></header>
+    <div class="scroll"><table id="cross" aria-label="Other model families"></table></div>
+    <p class="small muted" id="cross-note" style="margin-top:10px"></p></div>
+
   <div class="block" id="arena-block" hidden><header><h2>The Arena: attacker versus detector</h2><p class="muted">Claude writes a fresh batch of attacks each round. The trained detector is tested on them, learns from the ones that got through, and is tested again on a new batch it has never seen.</p></header>
     <div id="arena-rounds"></div>
     <div class="legend"><span><i class="sw" style="background:var(--fail)"></i>attacks that got past the detector</span><span><i class="sw" style="background:var(--warn)"></i>harmless messages wrongly blocked</span></div>
@@ -380,6 +384,12 @@ function renderTradeoff(){
   $("#tradeoff").innerHTML=s+"</svg>";
   $("#tradeoff-note").textContent="Pooled over "+agg[0].a+" attacks and "+agg[0].hn+" harmless prompts (the sets that record harmless counts). Sets differ in difficulty, so read the shape, not the exact percentages.";
 }
+function renderCross(){var L=D.crossmodel||[];if(!L.length)return;$("#cross-block").hidden=false;
+  var names={none:"No guard",g1:"Regex",g2:"Trained detector",g3:"Claude guard",g4:"Cascade"},ks=["none"];L.forEach(function(r){Object.keys(r.worked).forEach(function(k){if(ks.indexOf(k)<0)ks.push(k)})});
+  var h="<tr><th>Model</th><th>Attacks</th>"+ks.map(function(k){return"<th>"+names[k]+"</th>"}).join("")+"<th>Harmless blocked (worst)</th></tr>";
+  var b=L.map(function(r){var hb=Object.keys(r.harmless_blocked||{}).map(function(k){return r.harmless_blocked[k]}),mx=hb.length?Math.max.apply(null,hb):0;
+    return"<tr><td><b>"+esc(r.model)+"</b>"+(r.disguises?" <span class='badge'>with disguises</span>":"")+"</td><td class='mono'>"+r.attacks+"</td>"+ks.map(function(k){return r.worked[k]==null?"<td class='cell'>-</td>":"<td class='cell'>"+r.worked[k]+"<small>"+r.worked_ci[k][0]+" to "+r.worked_ci[k][1]+"%</small></td>"}).join("")+"<td class='mono'>"+mx+" of "+r.harmless_total+"</td></tr>"}).join("");
+  $("#cross").innerHTML=h+b;$("#cross-note").textContent="Small samples and the rule judge only. The detector was trained on text written by Claude, so a different family is a fair check of whether it only learned one style."}
 function renderArena(key,sx){
   var A=D[key];$("#arena"+sx+"-block").hidden=!A;if(!A)return;
   $("#arena"+sx+"-rounds").innerHTML=A.rounds.map(function(r){
@@ -474,7 +484,7 @@ function chips(host,list,fn){list.forEach(function(x){var c=el("button",{type:"b
 
 /* ---------- boot ---------- */
 function boot(d){
-  D=d;renderMatrix();renderStatic();renderTradeoff();renderArena("arena","");renderArena("arena_hard","-hard");
+  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderArena("arena","");renderArena("arena_hard","-hard");
   chips("#g-ex",D.examples.guard,function(x){$("#g-msg").value=x.text});
   chips("#a-ex",D.examples.agent,function(x){$("#a-msg").value=x.message;$("#a-note").value=x.planted_note||""});
   show(location.hash.slice(1));

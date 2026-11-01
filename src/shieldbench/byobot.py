@@ -84,3 +84,46 @@ def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, prog
             "by_category": cats, "worked_ci": ci, "disguises": disguises, "scored_extraction": has_canary, "seconds": round(time.time() - t0, 1),
             "worked_examples": [{"id": r["id"], "category": r["category"], "attack": r["text"], "reply": r["reply"]} for r in rows if r["none"]][:6],
             "guards": {k: g.name for k, g in guards.items()}}
+
+
+def main():
+    """Command line: scan one model and SAVE the report, so the website can show it.
+    python -m shieldbench.byobot --model gemma2:2b --disguises --guards g1,g2,g4
+    Saves/updates results/crossmodel.json (one entry per model); then run `python -m shieldbench.export_site`."""
+    import argparse
+    import json
+    from pathlib import Path
+    ap = argparse.ArgumentParser(description=main.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--url", default="http://localhost:11434/v1")
+    ap.add_argument("--model", required=True)
+    ap.add_argument("--key", default="")
+    ap.add_argument("--system-prompt-file", default="", help="your bot's system prompt (default: AcmeBot's)")
+    ap.add_argument("--guards", default="g1,g2")
+    ap.add_argument("--disguises", action="store_true")
+    ap.add_argument("--budget", type=float, default=1.0, help="USD cap for the Claude guards (g3/g4)")
+    ap.add_argument("--out", default="results/crossmodel.json")
+    a = ap.parse_args()
+    from .guardrails.pipeline import make_guard
+    keys = [k.strip() for k in a.guards.split(",") if k.strip()]
+    store = tracker = None
+    if any(k in ("g3", "g4") for k in keys):
+        from .store.db import Store
+        from .eval.cost import CostTracker
+        Path("results").mkdir(exist_ok=True)
+        store, tracker = Store("results/live.db"), CostTracker(a.budget)
+    guards = {k: make_guard(k, store=store, tracker=tracker) for k in keys}
+    cfg = {"base_url": a.url, "model": a.model, "key": a.key}
+    if a.system_prompt_file:
+        cfg["system_prompt"] = Path(a.system_prompt_file).read_text(encoding="utf-8")
+    rep = scan_bot(cfg, guards, disguises=a.disguises, progress=lambda i, n: print(f"\r{i}/{n} attacks", end="", flush=True))
+    print()
+    out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    allr = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
+    allr = [r for r in allr if r.get("model") != a.model] + [dict(rep, model=a.model, custom_prompt=bool(a.system_prompt_file))]
+    out.write_text(json.dumps(allr, indent=1), encoding="utf-8")
+    print(f"{a.model}: {rep['attacks']} attacks; worked {rep['worked']}; harmless blocked {rep['harmless_blocked']} of {rep['harmless_total']}; saved to {out}")
+
+
+if __name__ == "__main__":
+    main()

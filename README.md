@@ -312,3 +312,6 @@ The Live tab has a third mode, **Test your own bot**. Give it the address of any
 Command line equivalent: `python -m shieldbench.live --serve 8765 --guard g2 --site docs`, then POST to `/api/scan`.
 
 Limits: 22 attacks and no disguises, so a small sample; key-leak and data-leak attacks are scored only when your prompt contains the canary `SB-CANARY-7f3a9c` (or is left empty to use AcmeBot's); the judge is the rule judge. The key is used only for the calls and never stored or returned. Code: `src/shieldbench/byobot.py`.
+
+### Another model family (cross-model check)
+`python -m shieldbench.byobot --model gemma2:2b --disguises --guards g1,g2,g4` scans one model, saves the report to `results/crossmodel.json` (one entry per model), and `python -m shieldbench.export_site` puts it on the Results page under "Another model family". It addresses the limit that the guards were developed against Claude-written text; it is still a small sample judged by the rule judge.
