@@ -19,7 +19,21 @@ files = sorted(RES.glob("*.csv"))
 if not files:
     st.error("No results CSV found in results/. Run: python -m shieldbench.run --export results/my_run.csv")
     st.stop()
-names = [f.name for f in files if not f.name.endswith("_raw.csv") and not f.name.startswith("adaptive") and not f.name.startswith("heldout")] or [f.name for f in files]
+_NEED = {"target", "guard", "benign", "category"}
+
+
+def _is_results(f: Path) -> bool:
+    """Only run-result files can be shown here (the others, like crescendo.csv or agent_summary.csv, have other columns)."""
+    try:
+        return _NEED <= set(pd.read_csv(f, nrows=0).columns)
+    except Exception:
+        return False
+
+
+names = [f.name for f in files if not f.name.endswith("_raw.csv") and not f.name.startswith("adaptive") and not f.name.startswith("heldout") and _is_results(f)] or [f.name for f in files if _is_results(f)]
+if not names:
+    st.error("No run-result CSV found in results/.")
+    st.stop()
 if "final_judged.csv" in names:
     names.remove("final_judged.csv"); names.insert(0, "final_judged.csv")   # show the final results first
 choice = st.sidebar.selectbox("Results file", names)
