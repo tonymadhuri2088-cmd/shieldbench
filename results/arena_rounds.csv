@@ -1,0 +1,4 @@
+round,detector,attacks_written,attacks_confirmed,not_real_attacks,evaded,evasion_pct,evasion_low,evasion_high,harmless_written,harmless_confirmed,wrongly_blocked,wrongly_blocked_pct,wrongly_blocked_low,wrongly_blocked_high,categories_refused,seconds
+1,trained on 1085 rows,78,78,0,2,2.6,0.7,8.9,42,42,1,2.4,0.4,12.3,0,74.9
+2,trained on 1129 rows,80,80,0,1,1.2,0.2,6.7,35,35,2,5.7,1.6,18.6,0,82.0
+3,trained on 1165 rows,81,81,0,2,2.5,0.7,8.6,39,39,1,2.6,0.5,13.2,0,98.2

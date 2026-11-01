@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 data/labels/key.csv
 results/report.txt
+
+results/arena_cache/
+data/models/g2_arena*.joblib

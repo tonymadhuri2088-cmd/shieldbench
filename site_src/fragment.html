@@ -152,6 +152,24 @@ footer{border-top:1px solid var(--line);padding:22px 0 8px;color:var(--mute);fon
     <div><h3>Harmless prompts blocked</h3><div id="bars-hb"></div></div>
   </div>
 
+
+  <div class="block"><header><h2>Safety against false alarms</h2><p class="muted">One dot per guard, pooled over the test sets run against the local llama bot. Down and to the left is better: fewer attacks work, fewer harmless prompts are blocked. The label shows the delay added per message.</p></header>
+    <div id="tradeoff" class="scroll"></div>
+    <p class="small muted" id="tradeoff-note" style="margin-top:8px"></p></div>
+
+  <div class="block" id="arena-block" hidden><header><h2>The Arena: attacker versus detector</h2><p class="muted">Claude writes a fresh batch of attacks each round. The trained detector is tested on them, learns from the ones that got through, and is tested again on a new batch it has never seen.</p></header>
+    <div id="arena-rounds"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--fail)"></i>attacks that got past the detector</span><span><i class="sw" style="background:var(--warn)"></i>harmless messages wrongly blocked</span></div>
+    <h3 style="margin-top:22px">Does the retrained detector still work on the fixed test sets?</h3>
+    <div class="scroll"><table id="arena-reg"></table></div>
+    <div class="callout"><b>Read this with care.</b> The attacker, the judge and the Claude guard are the same model family, the labels come from a model and not a person, and each round is a small batch. The detector may only be learning this one attacker's style. The retrained detector is saved separately and does not replace the one used everywhere else.</div></div>
+  <div class="block" id="arena-hard-block" hidden><header><h2>The Arena, harder attacker</h2><p class="muted">Same loop, but the attacker is told a classifier is watching and that it must slip past it with disguised, indirect or multi-language messages.</p></header>
+    <div id="arena-hard-rounds"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--fail)"></i>attacks that got past the detector</span><span><i class="sw" style="background:var(--warn)"></i>harmless messages wrongly blocked</span></div>
+    <h3 style="margin-top:22px">Does the retrained detector still work on the fixed test sets?</h3>
+    <div class="scroll"><table id="arena-hard-reg"></table></div>
+    <div class="callout"><b>Read this with care.</b> The attacker, the judge and the Claude guard are the same model family, the labels come from a model and not a person, and each round is a small batch. The detector may only be learning this one attacker's style. The retrained detector is saved separately and does not replace the one used everywhere else.</div></div>
+
   <div class="block"><header><h2>A bot that adapts</h2><p class="muted">Claude plays the attacker for up to 6 rounds, reading each reply and trying again. 20 attempts per guard, 4 goals.</p></header>
     <div class="scroll"><table id="adaptive"></table></div></div>
 
@@ -230,7 +248,7 @@ footer{border-top:1px solid var(--line);padding:22px 0 8px;color:var(--mute);fon
       <li>The live server has no login and runs only on 127.0.0.1. It is for demos.</li>
     </ul></div>
   <div class="block"><header><h2>Built with</h2></header>
-    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (65 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
+    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (69 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
 <footer>All targets are fake apps with fake data. <span id="gen"></span></footer>
@@ -299,6 +317,29 @@ function renderSet(){
   bars("#bars-atk",s.worked,s.attacks,"var(--fail)");bars("#bars-hb",s.harmless_blocked,s.harmless,"var(--warn)");
 }
 $("#setsel").addEventListener("change",renderSet);
+
+function renderTradeoff(){
+  var skip={qwen:1,haiku:1},G=D.guards,agg=G.map(function(){return{w:0,a:0,h:0,hn:0}});
+  D.sets.forEach(function(s){if(skip[s.id])return;G.forEach(function(g,i){agg[i].w+=s.worked[i];agg[i].a+=s.attacks;if(s.harmless_blocked){agg[i].h+=s.harmless_blocked[i];agg[i].hn+=s.harmless}})});
+  var ms={g0:"no delay",g1:"0.2 ms",g2:"11 ms",g3:"1,100 ms",g4:"510 ms avg"};
+  var W=620,H=300,L=56,B=44,T=14,R=24,pw=W-L-R,ph=H-T-B,pts=agg.map(function(a,i){return{x:a.hn?a.h/a.hn*100:0,y:a.a?a.w/a.a*100:0,n:G[i].name,m:ms[G[i].key]}});
+  var xm=Math.max(10,Math.ceil(Math.max.apply(null,pts.map(function(p){return p.x}))/5)*5+2),ym=Math.max(10,Math.ceil(Math.max.apply(null,pts.map(function(p){return p.y}))/5)*5+2);
+  function X(v){return L+v/xm*pw}function Y(v){return T+ph-v/ym*ph}
+  var s="<svg viewBox='0 0 "+W+" "+H+"' role='img' aria-label='Attacks that worked against harmless prompts blocked, per guard' style='width:100%;max-width:"+W+"px;height:auto'>";
+  for(var t=0;t<=4;t++){var yv=ym*t/4,xv=xm*t/4;s+="<line x1='"+L+"' x2='"+(W-R)+"' y1='"+Y(yv)+"' y2='"+Y(yv)+"' stroke='"+tok("--line")+"'/><text x='"+(L-8)+"' y='"+(Y(yv)+4)+"' text-anchor='end' font-size='11' fill='"+tok("--mute")+"'>"+yv.toFixed(0)+"%</text><text x='"+X(xv)+"' y='"+(H-B+16)+"' text-anchor='middle' font-size='11' fill='"+tok("--mute")+"'>"+xv.toFixed(0)+"%</text>"}
+  s+="<text x='"+(L+pw/2)+"' y='"+(H-6)+"' text-anchor='middle' font-size='12' fill='"+tok("--mute")+"'>harmless prompts wrongly blocked</text><text transform='translate(14 "+(T+ph/2)+") rotate(-90)' text-anchor='middle' font-size='12' fill='"+tok("--mute")+"'>attacks that worked</text>";
+  var used=[];pts.forEach(function(p,i){var cx=X(p.x),cy=Y(p.y),right=cx<W-170,ly=cy+4;pts.forEach(function(q){var qx=X(q.x),qy=Y(q.y);if(q!==p&&right&&qx>cx&&qx-cx<135&&Math.abs(qy-cy)<10)ly=cy-12});used.forEach(function(u){if(Math.abs(u[0]-cx)<150&&Math.abs(u[1]-ly)<15)ly=u[1]-16});used.push([cx,ly]);s+="<circle cx='"+cx+"' cy='"+cy+"' r='6' fill='"+(i===4?tok("--stop"):tok("--info"))+"'/><text x='"+(cx+(right?11:-11))+"' y='"+ly+"' text-anchor='"+(right?"start":"end")+"' font-size='12' fill='"+tok("--fg")+"'>"+esc(p.n)+" <tspan fill='"+tok("--mute")+"'>· "+esc(p.m)+"</tspan></text>"});
+  $("#tradeoff").innerHTML=s+"</svg>";
+  $("#tradeoff-note").textContent="Pooled over "+agg[0].a+" attacks and "+agg[0].hn+" harmless prompts (the sets that record harmless counts). Sets differ in difficulty, so read the shape, not the exact percentages.";
+}
+function renderArena(key,sx){
+  var A=D[key];$("#arena"+sx+"-block").hidden=!A;if(!A)return;
+  $("#arena"+sx+"-rounds").innerHTML=A.rounds.map(function(r){
+    return"<div class='barrow' style='grid-template-columns:minmax(120px,190px) minmax(0,1fr) 190px'><b style='font-weight:500'>Round "+r.round+"<br><span class='muted small'>trained on "+r.detector.replace("trained on ","")+"<br>writer declined "+(r.categories_refused||0)+" of 5 categories"+((r.declined&&r.declined.length)?" ("+r.declined.join(", ").replace(/_/g," ")+")":"")+"; judge dropped "+(r.not_real_attacks||0)+((r.discarded_passed_detector)?" ("+r.discarded_passed_detector+" of them passed the detector)":"")+"</span></b><div><div class='bar' style='margin-bottom:4px' title='95% interval "+r.evasion_low+"% to "+r.evasion_high+"%'><i style='width:"+r.evasion_pct+"%;background:var(--fail)'></i></div><div class='bar'><i style='width:"+r.wrongly_blocked_pct+"%;background:var(--warn)'></i></div></div><span class='v'>"+r.evaded+"/"+r.attacks_confirmed+" got through ("+r.evasion_pct+"%)<br>"+r.wrongly_blocked+"/"+r.harmless_confirmed+" harmless blocked</span></div>"}).join("");
+  var h="<tr><th>Test set</th><th>Attacks caught, first detector</th><th>Attacks caught, last detector</th><th>Harmless blocked, first</th><th>Harmless blocked, last</th></tr>";
+  A.before.forEach(function(b,i){var a=A.after[i];h+="<tr><td>"+esc(b.set)+"</td><td class='mono'>"+b.caught+" / "+b.attacks+" ("+b.caught_pct+"%)</td><td class='mono'>"+a.caught+" / "+a.attacks+" ("+a.caught_pct+"%)</td><td class='mono'>"+b.blocked+" / "+b.harmless+"</td><td class='mono' style='"+(a.blocked_pct>b.blocked_pct+5?"color:var(--warn)":"")+"'>"+a.blocked+" / "+a.harmless+"</td></tr>"});
+  $("#arena"+sx+"-reg").innerHTML=h;
+}
 function renderStatic(){
   $("#setsel").innerHTML=D.sets.map(function(s,i){return"<option value='"+i+"'>"+esc(s.title)+"</option>"}).join("");renderSet();
   var h="<tr><th>Attacker</th>"+D.guards.map(function(g){return"<th style='text-align:center'>"+esc(g.name)+"</th>"}).join("")+"</tr>";
@@ -365,7 +406,7 @@ function chips(host,list,fn){list.forEach(function(x){var c=el("button",{type:"b
 
 /* ---------- boot ---------- */
 function boot(d){
-  D=d;renderMatrix();renderStatic();
+  D=d;renderMatrix();renderStatic();renderTradeoff();renderArena("arena","");renderArena("arena_hard","-hard");
   chips("#g-ex",D.examples.guard,function(x){$("#g-msg").value=x.text});
   chips("#a-ex",D.examples.agent,function(x){$("#a-msg").value=x.message;$("#a-note").value=x.planted_note||""});
   show(location.hash.slice(1));

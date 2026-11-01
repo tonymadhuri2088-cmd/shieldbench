@@ -107,9 +107,19 @@ def build(results: Path, out: Path, examples=True) -> dict:
                 refreshed.append("agent")
         except Exception:
             pass
-    data = dict(meta=dict(generated=time.strftime("%Y-%m-%d %H:%M"), refreshed=refreshed, tests=65, owasp="4 of 10",
+    data = dict(meta=dict(generated=time.strftime("%Y-%m-%d %H:%M"), refreshed=refreshed, tests=69, owasp="4 of 10",
                           version=_version()), guards=[dict(key=k, name=n) for k, n in GUARDS], sets=sets, agent=agent,
                 adaptive=ADAPTIVE, xstest=XSTEST, crescendo=CRESCENDO, latency=LATENCY)
+    for key in ("arena", "arena_hard"):
+        f = results / f"{key}.json"
+        if f.exists():
+            try:
+                ar = json.loads(f.read_text(encoding="utf-8"))
+                ar["examples"] = ar.get("examples", [])[:6]
+                data[key] = ar
+                data["meta"]["refreshed"].append(key)
+            except Exception:
+                pass
     if examples:
         data["examples"] = _examples(results)
     out.parent.mkdir(parents=True, exist_ok=True)

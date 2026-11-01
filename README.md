@@ -282,3 +282,14 @@ The Streamlit dashboard is replaced as the main front end by a plain web page, `
 - **Publish the static page (results only):** put the repo on GitHub, Settings, Pages, deploy from branch `main`, folder `/docs`. The Live view shows how to start the local server; a page on the internet cannot reach your computer's guard unless the server is running there.
 - The Claude guard and the cascade in the live console need `ANTHROPIC_API_KEY` on the computer that runs the server (the key never goes to the browser). The server listens on 127.0.0.1 only and has no login.
 - The Streamlit app (`app/dashboard.py`) still works as a backup.
+
+## The Arena (v0.36)
+An automatic attack-and-defend loop for the trained detector (G2).
+
+    python -m shieldbench.arena --rounds 3 --per-cat 16 --budget 2
+
+Each round, a Claude attacker writes fresh attacks (a Claude judge checks that they really are attacks), the current detector is tested on them, the ones that got through are added to its training data together with the round's harmless messages, and the detector is retrained. The next round uses a new batch, so every number comes from messages the detector has never seen. At the end, the first and the last detector are compared on the fixed test sets.
+
+Outputs: `results/arena.json`, `results/arena_rounds.csv`, `results/arena_summary.md`, `data/models/g2_arena.joblib` (the normal `g2.joblib` is never replaced). Then run `python -m shieldbench.export_site` to show it on the Results page. Calls are cached (`results/arena_cache/`), so a rerun is free, and a hard spending cap stops the run.
+
+Limits: attacker, judge and Claude guard are the same model family; labels come from a model; each round is a small batch; the detector may only learn this attacker's style. The Results page also gets a chart of attacks that worked against harmless prompts blocked, per guard.
