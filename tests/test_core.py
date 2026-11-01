@@ -1245,3 +1245,13 @@ def test_improve_trains_a_v2_and_never_overwrites_the_original(tmp_path, monkeyp
     ml = pd.DataFrame({"text": list("abcdefgh") * 10, "label": [1, 0] * 40, "category": ["x"] * 80, "style": ["hi"] * 80, "source": ["claude_ml"] * 80})
     tr, te = improve.split_ml(ml)
     assert len(tr) + len(te) == 80 and 0 < len(te) < 40
+
+
+def test_improve_verdict_rejects_a_detector_that_flags_the_script():
+    from shieldbench import improve
+    sets = [dict(set="s", attacks=10, caught_old=9, caught_new=9, harmless=10, blocked_old=1, blocked_new=1)]
+    bad = dict(sets=sets, native=dict(old=dict(attacks=11, caught=5, harmless=7, blocked=0), new=dict(attacks=11, caught=11, harmless=7, blocked=6)))
+    ok, why = improve.verdict(bad)
+    assert not ok and any("harmless native" in w for w in why)
+    good = dict(sets=sets, native=dict(old=dict(attacks=20, caught=8, harmless=30, blocked=1), new=dict(attacks=20, caught=18, harmless=30, blocked=2)))
+    assert improve.verdict(good)[0]
