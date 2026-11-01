@@ -97,6 +97,33 @@ ul.plain{padding-left:18px;margin:0 0 12px;max-width:72ch} ul.plain li{margin:5p
 footer{border-top:1px solid var(--line);padding:22px 0 8px;color:var(--mute);font-size:13px}
 @media (max-width:860px){.hero,.pair,.console,.takes,.cols3{grid-template-columns:minmax(0,1fr)} .barrow{grid-template-columns:minmax(0,1fr) 70px} .barrow .bar{grid-column:1/-1;order:3} .status{margin-left:0} nav button{padding:12px 9px}}
 @media (prefers-reduced-motion:no-preference){.verdict{transition:color .2s}}
+
+/* v0.38 polish: hero glow, eyebrow, byline, card feel */
+:root{--glow:rgba(61,214,160,.16);--glow2:rgba(124,184,255,.12)}
+:root[data-theme="light"]{--glow:rgba(11,143,104,.12);--glow2:rgba(31,95,174,.10)}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--glow:rgba(11,143,104,.12);--glow2:rgba(31,95,174,.10)}}
+.hero{position:relative;padding:34px 28px;border:1px solid var(--line);border-radius:14px;background:radial-gradient(900px 300px at 8% -10%,var(--glow),transparent 60%),radial-gradient(700px 300px at 100% 110%,var(--glow2),transparent 60%),var(--panel);overflow:hidden}
+.hero::after{content:"";position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:36px 36px;opacity:.18;pointer-events:none;mask-image:linear-gradient(120deg,#000,transparent 70%);-webkit-mask-image:linear-gradient(120deg,#000,transparent 70%)}
+.hero>*{position:relative;z-index:1}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--stop);border:1px solid var(--stop);border-radius:99px;padding:4px 12px;margin-bottom:16px}
+.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--stop);display:inline-block}
+.byline{display:flex;align-items:center;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line);max-width:62ch}
+.clogo+.avatar{display:none}
+.byline .clogo{height:56px;padding:5px 8px}
+.clogo{height:44px;width:auto;max-width:120px;object-fit:contain;background:#fff;border-radius:8px;padding:4px;flex:none}footer .clogo{height:30px}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--stop),var(--info));color:var(--ink-on-stop);display:grid;place-items:center;font:600 17px var(--f-display);flex:none}
+.byline b{display:block;font:600 15px var(--f-body)} .byline span{font-size:13px;color:var(--mute)}
+.hero .facts{background:color-mix(in srgb,var(--bg) 55%,transparent);border:1px solid var(--line);border-radius:10px;padding:6px 16px;backdrop-filter:blur(4px)}
+.hero .facts div:last-child{border-bottom:0}
+.block>header h2{display:flex;align-items:center;gap:10px}
+.block>header h2::before{content:"";width:4px;height:22px;background:var(--stop);border-radius:2px;flex:none}
+.panel{transition:border-color .15s,transform .15s}
+.panel:hover{border-color:var(--mute)}
+nav button{border-radius:6px 6px 0 0;transition:color .15s,background .15s} nav button:hover{background:var(--panel)}
+.brand i{box-shadow:0 0 14px var(--stop)}
+footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center;margin-top:56px}
+footer .who{display:flex;align-items:center;gap:10px;color:var(--fg)} footer .who span{color:var(--mute)}
+@media (max-width:860px){.hero{padding:22px 16px}}
 </style>
 
 <header class="top"><div class="wrap">
@@ -116,8 +143,10 @@ footer{border-top:1px solid var(--line);padding:22px 0 8px;color:var(--mute);fon
 <section class="view" id="v-overview">
   <div class="hero">
     <div>
+      <div class="eyebrow"><i></i>LLM red-teaming &amp; guardrail evaluation</div>
       <h1>Red-team an LLM app. Measure the guard and what it costs.</h1>
       <p class="lede">ShieldBench attacks a fake shop bot with fake secrets, puts five kinds of guard in front of it, and counts what gets through and what harmless requests get blocked. Everything here was measured on a laptop and a small API budget.</p>
+      <div class="byline">{{LOGO}}<div class="avatar">{{INITIAL}}</div><div><b>{{AUTHOR}}</b><span>{{COLLEGE}}</span></div></div>
     </div>
     <div class="facts" id="facts"></div>
   </div>
@@ -257,7 +286,7 @@ print(r.choices[0].finish_reason, r.choices[0].message.content)   # content_filt
     <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (71 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
-<footer>All targets are fake apps with fake data. <span id="gen"></span></footer>
+<footer><div class="who">{{LOGO}}<div class="avatar" style="width:30px;height:30px;font-size:13px">{{INITIAL}}</div><div><b>{{AUTHOR}}</b> <span>{{COLLEGE}}</span></div></div><div>All targets are fake apps with fake data. <span id="gen"></span></div></footer>
 </main>
 
 <script>
