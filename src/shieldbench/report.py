@@ -31,6 +31,9 @@ def main():
     for c in ("asr", "ci_low", "ci_high"):
         t[c] = (t[c] * 100).round(1)
     print(t.to_string(index=False))
+    from .taxonomy import risk_table
+    print("\n== Risk by category and severity (attack success %, with OWASP LLM Top 10 item) ==")
+    print(risk_table(df).to_string(index=False))
     print("\n== Overall ASR per guard: rule judge vs final verdict ==")
     print(metrics.judge_comparison(df).round(3).to_string(index=False))
     print("\n== ASR % by mutation and guard (final verdict) ==")

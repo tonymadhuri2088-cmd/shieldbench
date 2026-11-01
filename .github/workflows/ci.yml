@@ -9,3 +9,4 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
       - run: PYTHONPATH=src pytest -q
+      - run: PYTHONPATH=src python -m shieldbench.gate --csv results/final_judged.csv --guard g4_cascade --max-asr 0.05 --max-overrefusal 0.10
