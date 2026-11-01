@@ -490,6 +490,6 @@ function boot(d){
   show(location.hash.slice(1));
   fetch((/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":"http://127.0.0.1:8765")+"/api/health").then(function(r){return r.json()}).then(function(h){if(h&&h.ok){api=/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":"http://127.0.0.1:8765";setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#c-agent").disabled=!h.agent}else throw 0}).catch(function(){setStatus(false,"live backend: not running")});
 }
-fetch("data.json").then(function(r){return r.json()}).then(boot).catch(function(){document.querySelector("main").insertAdjacentHTML("afterbegin","<p style='color:var(--fail)'>data.json could not be loaded. Run python -m shieldbench.export_site and serve the docs folder.</p>")});
+fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(boot).catch(function(){document.querySelector("main").insertAdjacentHTML("afterbegin","<p style='color:var(--fail)'>data.json could not be loaded. Run python -m shieldbench.export_site and serve the docs folder.</p>")});
 })();
 </script>
