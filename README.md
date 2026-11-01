@@ -304,3 +304,11 @@ Limits: attacker, judge and Claude guard are the same model family; labels come 
     python -m shieldbench.live --serve 8765 --guard g2 --target ollama --site docs
 
 Limits: runs on this computer only, no login, checks the newest message only (not the whole conversation), one request at a time, the streamed answer arrives as a single chunk.
+
+## v0.38: Test your own bot
+
+The Live tab has a third mode, **Test your own bot**. Give it the address of any chatbot server that speaks the OpenAI chat format (Ollama at `http://localhost:11434/v1`, LM Studio, vLLM, a hosted model), the model name, an optional key and your bot's own system prompt. ShieldBench sends the 22 seed attacks with your prompt, then scores each guard you tick (regex, trained detector, cascade) on the replies and on 22 harmless messages. The model runs at temperature 0, so an attack the guard lets through gets the same reply as with no guard, which means one model call per attack for all guards.
+
+Command line equivalent: `python -m shieldbench.live --serve 8765 --guard g2 --site docs`, then POST to `/api/scan`.
+
+Limits: 22 attacks and no disguises, so a small sample; key-leak and data-leak attacks are scored only when your prompt contains the canary `SB-CANARY-7f3a9c` (or is left empty to use AcmeBot's); the judge is the rule judge. The key is used only for the calls and never stored or returned. Code: `src/shieldbench/byobot.py`.

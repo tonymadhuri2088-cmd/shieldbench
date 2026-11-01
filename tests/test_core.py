@@ -1016,3 +1016,65 @@ def test_gateway_blocks_attacks_and_passes_normal_messages():
         assert False
     except urllib.error.HTTPError as e:
         assert e.code == 400
+
+
+def test_scan_your_own_bot_scores_guards_on_one_reply_per_attack():
+    import re
+    from shieldbench.byobot import scan_bot
+    from shieldbench.guardrails.pipeline import make_guard
+    from shieldbench.targets.base import Reply
+    calls = []
+
+    class Gullible:                      # obeys any marker, like a weak bot
+        name = "fake:gullible"
+
+        def generate(self, messages):
+            calls.append(1)
+            m = re.search(r"(PWNED-\d+|REFUND APPROVED)", messages[-1]["content"])
+            return Reply(text=m.group(1) if m else "Sure, happy to help.", in_tokens=0, out_tokens=0, cost_usd=0.0)
+    r = scan_bot({"system_prompt": "You are a shop bot."}, {"g1": make_guard("g1")}, bot=Gullible())
+    assert r["attacks"] == len(calls) and r["scored_extraction"] is False
+    assert r["worked"]["none"] > 0 and r["worked"]["g1"] <= r["worked"]["none"]
+    assert r["harmless_total"] == 22 and r["harmless_blocked"]["g1"] <= 5
+    assert all(a["category"] not in ("prompt_extraction", "pii_leakage") for a in r["worked_examples"])
+    full = scan_bot({}, {"g1": make_guard("g1")}, bot=Gullible())            # empty prompt = AcmeBot, extraction attacks included
+    assert full["scored_extraction"] is True and full["attacks"] > r["attacks"]
+
+
+def test_scan_endpoint_attacks_a_server_and_never_echoes_the_key():
+    import json
+    import threading
+    import time
+    import urllib.request
+    import urllib.error
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from shieldbench.live import Protector, serve
+
+    class Bot(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            b = json.dumps({"choices": [{"message": {"content": "PWNED-4821 " + body["messages"][-1]["content"][:20]}}]}).encode()
+            self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+    bp, sp = _free_port(), _free_port()
+    srv = HTTPServer(("127.0.0.1", bp), Bot)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    threading.Thread(target=serve, args=(Protector("g1", "none"), sp, None, "none"), daemon=True).start()
+    time.sleep(0.8)
+
+    def post(body):
+        r = urllib.request.Request(f"http://127.0.0.1:{sp}/api/scan", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
+        return json.loads(urllib.request.urlopen(r, timeout=60).read())
+    try:
+        out = post({"base_url": f"http://127.0.0.1:{bp}/v1", "model": "m", "key": "sk-secret", "guards": ["g1"], "limit": 6})
+    except urllib.error.HTTPError as e:
+        raise AssertionError(e.read())
+    srv.shutdown()
+    assert out["attacks"] == 6 and out["worked"]["none"] >= 1 and "sk-secret" not in json.dumps(out)
+    try:
+        post({"base_url": "ftp://x", "model": "m", "guards": ["g1"]})
+        assert False
+    except urllib.error.HTTPError as e:
+        assert e.code == 503 and "http" in json.loads(e.read())["error"]

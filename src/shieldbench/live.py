@@ -157,6 +157,7 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
     """Local web server (one request at a time, so the SQLite cache is only ever used from one thread): the JSON API for the live demo and, with `site`, the web page itself (same address, so no browser permission problems).
     GET  /api/health                      what is available
     POST /api/check  {"message", "guard"?, "reset"?}                 guard decision (guards g0..g4; g3/g4 need ANTHROPIC_API_KEY)
+    POST /api/scan   {"base_url","model","key"?,"system_prompt"?,"guards"?}   attack YOUR OWN chatbot (any OpenAI-format server) and score the guards on its replies
     POST /api/agent  {"message", "policy": true|false, "planted_note"?}   run AcmeAgent (needs --target ollama or claude)
     POST /check      same as /api/check (older name)
     POST /v1/chat/completions   the GATEWAY: OpenAI-compatible, so any app or OpenAI client can point at http://127.0.0.1:PORT/v1
@@ -192,6 +193,12 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
         row = harness.run_case(agent_ctx["target"], agent_ctx["store"], agent_ctx["tracker"], case, guard, bool(body.get("scan", False)), bool(body.get("policy", False)))
         return {"calls": json.loads(row["tools_called"]), "reply": row["final_reply"], "tried": bool(row["attempted"]), "worked": bool(row["worked"]),
                 "blocked_by": row["blocked_by"], "seconds": row["seconds"], "guard": guard.name, "policy": bool(body.get("policy", False))}
+
+    def scan_run(body: dict) -> dict:
+        from .byobot import scan_bot
+        keys = [k for k in (body.get("guards") or ["g1", "g2"]) if k in ("g1", "g2", "g3", "g4")][:4] or ["g2"]
+        gs = {k: get_protector(k).guard for k in keys}
+        return scan_bot(body, gs, int(body.get("limit") or 0))
 
     class H(BaseHTTPRequestHandler):
         def _cors(self):
@@ -265,6 +272,8 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
                 body = json.loads(self.rfile.read(n) or b"{}")
                 if path in ("/v1/chat/completions", "/chat/completions"):
                     return self._gateway(body)
+                if path == "/api/scan":
+                    return self._send(200, scan_run(body))
                 msg = str(body.get("message", ""))
                 if not msg.strip():
                     return self._send(400, {"error": "message is empty"})
