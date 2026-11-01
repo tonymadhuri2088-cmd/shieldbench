@@ -440,3 +440,20 @@ def test_resolve_finds_heldout_attacks():
     from shieldbench.attacks.mutators import resolve
     from shieldbench.attacks.heldout import HELDOUT
     assert all(resolve(a.id).text == a.text for a in HELDOUT)
+
+
+def test_heldout2_shape_resolve_and_mock_run(tmp_path):
+    from shieldbench.attacks.heldout import HELDOUT
+    from shieldbench.attacks.heldout2 import HELDOUT2, HELDOUT2_BENIGN
+    from shieldbench.attacks.mutators import resolve
+    from shieldbench.eval.runner import run
+    from shieldbench.store.db import Store
+    from shieldbench.targets.mock_target import MockTarget
+    assert len(HELDOUT2) == 40 and len(HELDOUT2_BENIGN) == 20
+    assert len({a.id for a in HELDOUT2}) == 40
+    assert not ({a.text for a in HELDOUT2} & {a.text for a in HELDOUT})
+    assert all(resolve(a.id).text == a.text for a in HELDOUT2)
+    assert all(a.marker for a in HELDOUT2 if a.category in ("direct_injection", "indirect_injection", "jailbreak"))
+    store = Store(str(tmp_path / "h2.db"))
+    rid, _ = run(MockTarget(), store, guards=("g0", "g1"), attack_set="heldout2")
+    assert len(store.results_df(rid)) == 2 * 60

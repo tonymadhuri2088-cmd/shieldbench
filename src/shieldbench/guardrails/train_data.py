@@ -72,7 +72,8 @@ def test_texts() -> list[str]:
     texts += [c.text + " " + (c.document or "") for c in controls()]
     try:                                     # the held-out set must stay unseen by the detector
         from ..attacks.heldout import HELDOUT, HELDOUT_BENIGN
-        texts += [a.text + (" " + a.document if a.document else "") for a in HELDOUT] + HELDOUT_BENIGN
+        from ..attacks.heldout2 import HELDOUT2, HELDOUT2_BENIGN
+        texts += [a.text + (" " + a.document if a.document else "") for a in HELDOUT + HELDOUT2] + HELDOUT_BENIGN + HELDOUT2_BENIGN
     except ImportError:
         pass
     return texts

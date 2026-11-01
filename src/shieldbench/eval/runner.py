@@ -45,15 +45,21 @@ def run(target: Target, store: Store, guards=("g0", "g1"), mutations=(), include
     if attack_set == "heldout":
         from ..attacks.heldout import load_heldout
         base = load_heldout()
+    elif attack_set == "heldout2":
+        from ..attacks.heldout2 import load_heldout2
+        base = load_heldout2()
     else:
         base = load()
     attacks: list[Attack] = base + mutators.apply(base, list(mutations))
     if limit:
         attacks = attacks[:limit]
     items = [(a, False) for a in attacks]
-    if attack_set == "heldout":
-        from ..attacks.heldout import HELDOUT_BENIGN
-        items += [(Attack(id=f"hdb-{i:02d}", category="benign_heldout", family="benign_heldout", text=t), True) for i, t in enumerate(HELDOUT_BENIGN)]
+    if attack_set in ("heldout", "heldout2"):
+        if attack_set == "heldout":
+            from ..attacks.heldout import HELDOUT_BENIGN as _hb
+        else:
+            from ..attacks.heldout2 import HELDOUT2_BENIGN as _hb
+        items += [(Attack(id=f"hdb-{i:02d}", category="benign_heldout", family="benign_heldout", text=t), True) for i, t in enumerate(_hb)]
     elif include_benign:
         items += [(Attack(id=f"benign-{i:02d}", category="benign", family="benign", text=t), True) for i, t in enumerate(BENIGN)]
         items += [(c, True) for c in controls()]

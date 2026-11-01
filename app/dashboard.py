@@ -179,3 +179,19 @@ with tab7:
         st.warning("Before retraining, the detector (G2) let 2 of these 40 through and the cascade (G4) let 1 through. "
                    "Training examples in those two styles were then added, which fixed them. Because the styles were chosen after "
                    "looking at this set, it is now a tuning set, not an untouched test. A fresh set is needed to claim more.")
+
+    h2 = RES / "heldout2_judged.csv"
+    if h2.exists():
+        st.subheader("A second, untouched set (run once, never used for training)")
+        d2 = metrics.with_verdict(pd.read_csv(h2))
+        rows2 = []
+        for g in sorted(d2.guard.unique()):
+            a = d2[(d2.guard == g) & (d2.benign == 0)]
+            h = d2[(d2.guard == g) & (d2.benign == 1)]
+            p, lo, hi = metrics.wilson(int(a.verdict.sum()), len(a))
+            rows2.append({"guard": g, "attacks that worked": f"{int(a.verdict.sum())} of {len(a)}", "attack success %": round(p * 100, 1),
+                          "interval %": f"{lo*100:.1f} to {hi*100:.1f}", "harmless blocked": f"{int(h.blocked.sum())} of {len(h)}"})
+        st.dataframe(pd.DataFrame(rows2), hide_index=True)
+        st.markdown("New styles again: hex, hyphen-split words, look-alike letters, emoji, prefix injection, many-shot, Telugu, Bengali and Hindi, "
+                    "and documents shaped like email chains, XML, tables and calendar invites. Only 8 of the 40 attacks work against an unguarded bot "
+                    "(the small local model refuses or fumbles the rest), so zero here means the guards stopped those 8 and the true rate could still be up to about 9%.")
