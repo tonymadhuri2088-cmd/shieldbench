@@ -274,3 +274,11 @@ Only 4 of the 40 work against the unguarded small model (it fumbles encodings an
 | detector + scan + policy | 0% | 75% |
 
 By category with no protection: direct misuse 60%, other customers' data 60%, hidden in delivery notes 10%. The text guards cost 25 points of normal tasks; the tool-layer policy cost none. The policy's 0% is by design (it enforces the same rules the test checks) and was written by hand for these five tools, so the finding is the design lesson, not a general guarantee. Small test: 30 attacks, 20 tasks, one small model.
+
+## Web front end and live backend (v0.35)
+The Streamlit dashboard is replaced as the main front end by a plain web page, `docs/index.html` (no build step, no framework; source in `site_src/fragment.html`, wrapped by `python build_site.py`). It reads `docs/data.json` and has five views: Overview (every test set against every guard), Results (per-set bars with 95% intervals, adaptive attackers, XSTest, delay, whole-conversation test), Agent (AcmeAgent), Live (a console that calls the real guards) and Method (test sets, limits, stack).
+- **Refresh the numbers from your result files:** `python -m shieldbench.export_site` rewrites `docs/data.json` from `results/*.csv`; any file that is missing keeps the saved numbers, and the page footer says which sets were refreshed.
+- **Run the whole thing locally (the demo):** `python -m shieldbench.live --serve 8765 --guard g2 --target ollama --site docs`, then open http://127.0.0.1:8765/. The page and the API share one address, so there are no browser permission problems. API: `GET /api/health`, `POST /api/check` (guard g0..g4), `POST /api/agent` (AcmeAgent with policy and scan switches; needs `--target`).
+- **Publish the static page (results only):** put the repo on GitHub, Settings, Pages, deploy from branch `main`, folder `/docs`. The Live view shows how to start the local server; a page on the internet cannot reach your computer's guard unless the server is running there.
+- The Claude guard and the cascade in the live console need `ANTHROPIC_API_KEY` on the computer that runs the server (the key never goes to the browser). The server listens on 127.0.0.1 only and has no login.
+- The Streamlit app (`app/dashboard.py`) still works as a backup.
