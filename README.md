@@ -47,7 +47,7 @@ flowchart LR
 - **Judges:** a rule judge (looks for canary strings) and a Claude judge (Sonnet, one rubric per category). The final verdict uses the Claude judge when it ran.
 - **Adaptive attacker:** a plain Python loop. A Claude Haiku attacker (local Ollama model as fallback if Claude refuses) writes a message, the message goes through the guard, the bot and the output guard, a deterministic canary check decides whether the goal was reached, and the reply is fed back for the next round (up to 6 rounds, 5 trials per goal, 4 goals: key, discount code, email, phone).
 - **Metrics:** attack success rate with Wilson intervals, over-refusal split into "guard blocked" and "bot refused", task success on clean documents, model latency vs guard overhead, a block breakdown, adaptive success and rounds to win.
-- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 40 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
+- **Engineering:** every model call is cached in SQLite by a hash of the model and messages (reruns are free and results reproducible), a cost cap stops a run with `BudgetExceeded`, schema migrations, 43 tests, GitHub Actions CI. The whole project cost well under 1 US dollar of API credit.
 
 ## Judge validation
 
@@ -85,7 +85,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows;  source .venv/bin/activate on Linux/Mac
 pip install -r requirements.txt
 copy .env.example .env          # add your Anthropic key only if you use Claude
-pytest                          # 40 tests should pass
+pytest                          # 43 tests should pass
 ```
 Never commit `.env`; it is in `.gitignore`.
 
@@ -147,3 +147,18 @@ src/shieldbench/
   store/       db (SQLite results, cache, adaptive episodes)
 app/dashboard.py   tests/   results/   data/labels/
 ```
+
+## Extra analysis (v0.22)
+- Dashboard **Analysis** tab: safety-vs-delay chart, McNemar exact test between guards on the same attacks, disguise-by-guard heatmap, and a judge-error correction (Rogan-Gladen).
+- `python -m shieldbench.datasheet --csv results/final_judged.csv --out results/datasheet.md` writes a one-page datasheet with content hashes of every test set.
+- `python -m shieldbench.guardrails.detector_eval` prints precision, recall, F1, AUC and calibration error of the detector per test set.
+
+## Second target: Claude Haiku as the support bot
+Same 124 attacks and 60 harmless prompts, bot = claude-haiku-5-5 (`results/haiku_judged.csv`, cost about $0.25 including the judge).
+| Guard | Attacks that worked (final verdict) | Rule judge said |
+|---|---|---|
+| none | 2.4% (3 of 124) | 8.9% |
+| regex | 2.4% | 6.5% |
+| detector, Claude guard, cascade | 0% | 0% |
+Harmless prompts blocked by the guard: detector 9 of 60, cascade 3 of 60, regex 1, Claude guard 0 (same as on the small local model).
+Honest reading: Haiku resists most attacks by itself, and the rule judge wrongly counted refusals that quote the attack word as leaks (13 cases, all overruled by the Claude judge). With so few attacks working on the unguarded bot, this run cannot show that the guards help; the llama3.2:3b target is the real test.

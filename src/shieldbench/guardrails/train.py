@@ -38,13 +38,24 @@ def main():
     print(f"\n5-fold cross-validation at threshold 0.5:  attack recall {pred[y == 1].mean():.1%}   "
           f"harmless wrongly blocked {pred[y == 0].mean():.1%}")
 
-    print("\nLeave-one-category-out (trained WITHOUT the category, then asked to catch it):")
+    print("\nLeave-one-category-out (trained WITHOUT the category, then asked to catch it; a random 20% of harmless prompts is held out too):")
     rows = []
+    rng = np.random.RandomState(config.SEED)
+    ben_idx = np.where(y == 0)[0]
     for cat in sorted(df[df.label == 1].category.unique()):
-        te = (df.category == cat).to_numpy()
+        te_atk = (df.category == cat).to_numpy()
+        te_ben = np.zeros(len(df), dtype=bool)
+        te_ben[rng.choice(ben_idx, size=max(1, len(ben_idx) // 5), replace=False)] = True
+        te = te_atk | te_ben
         m = build_pipeline(a.C).fit(X[~te], y[~te])
-        p = m.predict_proba(X[te])[:, 1]
-        rows.append({"held-out category": cat, "n": int(te.sum()), "attacks caught at 0.5": round(float((p >= 0.5).mean()), 3)})
+        pred = m.predict_proba(X[te])[:, 1] >= 0.5
+        yt = y[te]
+        tp, fp, fn = int((pred & (yt == 1)).sum()), int((pred & (yt == 0)).sum()), int((~pred & (yt == 1)).sum())
+        prec = tp / (tp + fp) if tp + fp else float("nan")
+        rec = tp / (tp + fn) if tp + fn else float("nan")
+        f1 = 2 * prec * rec / (prec + rec) if tp else 0.0
+        rows.append({"held-out category": cat, "attacks": int(te_atk.sum()), "harmless": int(te_ben.sum()),
+                     "precision": round(prec, 3), "recall": round(rec, 3), "F1": round(f1, 3)})
     print(pd.DataFrame(rows).to_string(index=False))
 
     hi, lo = _pick_thresholds(y, oof)

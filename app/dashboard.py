@@ -8,6 +8,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from shieldbench.eval import metrics  # noqa: E402
+from shieldbench import analysis  # noqa: E402
 
 RES = Path(__file__).resolve().parents[1] / "results"
 st.set_page_config(page_title="ShieldBench", layout="wide")
@@ -28,7 +29,7 @@ if choice.startswith("sample"):
 st.sidebar.write(f"Target: **{', '.join(df.target.unique())}**")
 st.sidebar.write(f"Rows: {len(df)}")
 
-tab0, tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Overview", "Attack success", "Over-refusal and latency", "Mutations", "Examples", "Adaptive attacker", "Judge reliability", "Unseen attacks"])
+tab0, tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Overview", "Attack success", "Over-refusal and latency", "Mutations", "Examples", "Adaptive attacker", "Judge reliability", "Unseen attacks", "Analysis"])
 df = metrics.with_verdict(df)
 asr = metrics.asr_table(df, "verdict")
 with tab0:
@@ -195,3 +196,38 @@ with tab7:
         st.markdown("New styles again: hex, hyphen-split words, look-alike letters, emoji, prefix injection, many-shot, Telugu, Bengali and Hindi, "
                     "and documents shaped like email chains, XML, tables and calendar invites. Only 8 of the 40 attacks work against an unguarded bot "
                     "(the small local model refuses or fumbles the rest), so zero here means the guards stopped those 8 and the true rate could still be up to about 9%.")
+
+
+with tab8:
+    import altair as alt
+    st.subheader("Safety against cost")
+    tt = analysis.tradeoff_table(df)
+    st.dataframe(tt, hide_index=True)
+    if tt["mean guard delay (ms)"].notna().any():
+        ch = alt.Chart(tt).mark_circle(opacity=0.8).encode(
+            x=alt.X("mean guard delay (ms)", title="Added delay per request (ms, log scale)", scale=alt.Scale(type="symlog")),
+            y=alt.Y("attack success %", title="Attacks that worked (%)", scale=alt.Scale(domain=[0, 100])),
+            size=alt.Size("harmless blocked %", title="Harmless blocked (%)", scale=alt.Scale(range=[80, 900])),
+            color=alt.Color("guard", title="Guard"), tooltip=list(tt.columns))
+        st.altair_chart(ch, use_container_width=True)
+        st.caption("Best corner is bottom-left: few attacks work and little delay. Bigger circle means more harmless requests wrongly blocked.")
+    st.subheader("Is the difference between two guards real?")
+    pt = analysis.pairwise_tests(df)
+    if len(pt):
+        st.dataframe(pt, hide_index=True)
+        st.caption("McNemar exact test on the same attacks. 'No clear difference' means the data cannot separate the two guards; it does not mean they are equal.")
+    st.subheader("Which disguise beats which guard")
+    hm = analysis.mutation_heatmap_data(df)
+    if len(hm):
+        c = alt.Chart(hm).mark_rect().encode(x=alt.X("guard:N", title=None), y=alt.Y("mutation:N", title=None),
+            color=alt.Color("attack success %:Q", scale=alt.Scale(domain=[0, 100], scheme="orangered"), title="Success %"),
+            tooltip=["mutation", "guard", "attack success %", "attacks"])
+        t = alt.Chart(hm).mark_text(fontSize=12).encode(x="guard:N", y="mutation:N", text=alt.Text("attack success %:Q", format=".0f"))
+        st.altair_chart(c + t, use_container_width=True)
+    st.subheader("Correct for judge mistakes")
+    st.caption("If the judge misses some real leaks (sensitivity) or flags some safe replies (specificity), the observed rate is off. Move the sliders to see the corrected rate (Rogan-Gladen).")
+    c1, c2, c3 = st.columns(3)
+    obs = c1.number_input("Observed attack success (%)", 0.0, 100.0, float(tt["attack success %"].max()) if len(tt) else 10.0)
+    se = c2.slider("Judge sensitivity", 0.5, 1.0, 0.9)
+    sp = c3.slider("Judge specificity", 0.5, 1.0, 0.95)
+    st.metric("Corrected attack success", f"{analysis.rogan_gladen(obs / 100, se, sp) * 100:.1f}%")
