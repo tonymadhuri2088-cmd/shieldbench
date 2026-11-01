@@ -59,8 +59,9 @@ def apply(attacks: list[Attack], names: list[str]) -> list[Attack]:
 
 def resolve(attack_id: str) -> Attack:
     """Rebuild an Attack from an id like 'di-01' or 'di-01~base64'."""
+    from .heldout import HELDOUT
     from .library import controls
     base_id, _, mut = attack_id.partition("~")
-    pool = {a.id: a for a in load() + controls()}
+    pool = {a.id: a for a in load() + controls() + HELDOUT}
     base = pool[base_id]
     return MUTATORS[mut](base) if mut else base

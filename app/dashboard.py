@@ -18,7 +18,7 @@ files = sorted(RES.glob("*.csv"))
 if not files:
     st.error("No results CSV found in results/. Run: python -m shieldbench.run --export results/my_run.csv")
     st.stop()
-names = [f.name for f in files if not f.name.endswith("_raw.csv") and not f.name.startswith("adaptive")] or [f.name for f in files]
+names = [f.name for f in files if not f.name.endswith("_raw.csv") and not f.name.startswith("adaptive") and not f.name.startswith("heldout")] or [f.name for f in files]
 if "final_judged.csv" in names:
     names.remove("final_judged.csv"); names.insert(0, "final_judged.csv")   # show the final results first
 choice = st.sidebar.selectbox("Results file", names)
@@ -28,7 +28,7 @@ if choice.startswith("sample"):
 st.sidebar.write(f"Target: **{', '.join(df.target.unique())}**")
 st.sidebar.write(f"Rows: {len(df)}")
 
-tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Attack success", "Over-refusal and latency", "Mutations", "Examples", "Adaptive attacker", "Judge reliability"])
+tab0, tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Overview", "Attack success", "Over-refusal and latency", "Mutations", "Examples", "Adaptive attacker", "Judge reliability", "Unseen attacks"])
 df = metrics.with_verdict(df)
 asr = metrics.asr_table(df, "verdict")
 with tab0:
@@ -148,3 +148,29 @@ with tab6:
                     "- The rule judge counts a refusal that quotes the secret or the attack word as a leak. This is why the Claude judge decides the final verdict.\n"
                     "- A few replies could not be scored by the Claude judge and are left out of its row.\n"
                     "- One labeler and 100 replies is a small check, not proof.")
+
+
+with tab7:
+    st.subheader("Attacks written after the detector was trained")
+    parts = [RES / "heldout_judged.csv", RES / "heldout_v2_judged.csv"]
+    if not all(p.exists() for p in parts):
+        st.info("Unseen-attack results not found (results/heldout_judged.csv and results/heldout_v2_judged.csv).")
+    else:
+        old = metrics.with_verdict(pd.read_csv(parts[0]))
+        new = metrics.with_verdict(pd.read_csv(parts[1]))
+        old, new_df = old[old.guard.isin(["g0_none", "g1_regex", "g3_claude"])], new
+        hd = pd.concat([old, new_df], ignore_index=True)
+        rows = []
+        for g in sorted(hd.guard.unique()):
+            a = hd[(hd.guard == g) & (hd.benign == 0)]
+            h = hd[(hd.guard == g) & (hd.benign == 1)]
+            p, lo, hi = metrics.wilson(int(a.verdict.sum()), len(a))
+            rows.append({"guard": g, "attacks that worked": f"{int(a.verdict.sum())} of {len(a)}", "attack success %": round(p * 100, 1),
+                         "interval %": f"{lo*100:.1f} to {hi*100:.1f}", "harmless blocked": f"{int(h.blocked.sum())} of {len(h)}"})
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
+        st.markdown("40 new attacks (long cover stories, JSON and code wrappers, spaced or reversed text, Tamil-English, fake transcripts, "
+                    "documents shaped like reviews or invoices) and 20 new harmless prompts. Their closest match in the training data is below 0.7 "
+                    "(similarity, 1 means identical).")
+        st.warning("Before retraining, the detector (G2) let 2 of these 40 through and the cascade (G4) let 1 through. "
+                   "Training examples in those two styles were then added, which fixed them. Because the styles were chosen after "
+                   "looking at this set, it is now a tuning set, not an untouched test. A fresh set is needed to claim more.")

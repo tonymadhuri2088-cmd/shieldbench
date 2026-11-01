@@ -39,15 +39,22 @@ def _task_ok(marker: str, resp: str) -> bool:
 
 
 def run(target: Target, store: Store, guards=("g0", "g1"), mutations=(), include_benign=True,
-        budget_usd=5.0, limit=None, run_id=None, on_row=None, guard_client=None, hard_benign=False):
+        budget_usd=5.0, limit=None, run_id=None, on_row=None, guard_client=None, hard_benign=False, attack_set="main"):
     run_id = run_id or time.strftime("run-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     tracker = CostTracker(budget_usd)
-    base = load()
+    if attack_set == "heldout":
+        from ..attacks.heldout import load_heldout
+        base = load_heldout()
+    else:
+        base = load()
     attacks: list[Attack] = base + mutators.apply(base, list(mutations))
     if limit:
         attacks = attacks[:limit]
     items = [(a, False) for a in attacks]
-    if include_benign:
+    if attack_set == "heldout":
+        from ..attacks.heldout import HELDOUT_BENIGN
+        items += [(Attack(id=f"hdb-{i:02d}", category="benign_heldout", family="benign_heldout", text=t), True) for i, t in enumerate(HELDOUT_BENIGN)]
+    elif include_benign:
         items += [(Attack(id=f"benign-{i:02d}", category="benign", family="benign", text=t), True) for i, t in enumerate(BENIGN)]
         items += [(c, True) for c in controls()]
     if hard_benign:

@@ -411,3 +411,32 @@ def test_report_merges_latest_run_per_guard(tmp_path, capsys, monkeypatch):
     report.main()
     out = capsys.readouterr().out
     assert "g0_none" in out and "g1_regex" in out and "run-a" in out and "run-b" in out
+
+
+def test_heldout_set_shape_and_mock_run(tmp_path):
+    from shieldbench.attacks.heldout import HELDOUT, HELDOUT_BENIGN
+    from shieldbench.eval.runner import run
+    from shieldbench.store.db import Store
+    from shieldbench.targets.mock_target import MockTarget
+    assert len(HELDOUT) == 40 and len(HELDOUT_BENIGN) == 20
+    assert len({a.id for a in HELDOUT}) == 40
+    assert all(a.marker for a in HELDOUT if a.category in ("direct_injection", "indirect_injection", "jailbreak"))
+    store = Store(str(tmp_path / "h.db"))
+    rid, _ = run(MockTarget(), store, guards=("g0", "g1"), attack_set="heldout")
+    df = store.results_df(rid)
+    assert len(df) == 2 * 60 and set(df[df.benign == 1].category) == {"benign_heldout"}
+
+
+def test_run_cli_runs_heldout_with_mock(tmp_path):
+    import subprocess, sys
+    r = subprocess.run([sys.executable, "-m", "shieldbench.run", "--target", "mock", "--guards", "g0,g1", "--attack-set", "heldout",
+                        "--db", str(tmp_path / "c.db")], capture_output=True, text=True, cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]),
+                       env={**__import__("os").environ, "PYTHONPATH": "src"})
+    assert r.returncode == 0, r.stderr[-400:]
+    assert "120 rows" in r.stdout
+
+
+def test_resolve_finds_heldout_attacks():
+    from shieldbench.attacks.mutators import resolve
+    from shieldbench.attacks.heldout import HELDOUT
+    assert all(resolve(a.id).text == a.text for a in HELDOUT)
