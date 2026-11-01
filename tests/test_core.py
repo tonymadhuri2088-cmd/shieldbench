@@ -1078,3 +1078,21 @@ def test_scan_endpoint_attacks_a_server_and_never_echoes_the_key():
         assert False
     except urllib.error.HTTPError as e:
         assert e.code == 503 and "http" in json.loads(e.read())["error"]
+
+
+def test_scan_with_disguises_adds_attacks_and_intervals():
+    from shieldbench.byobot import scan_bot
+    from shieldbench.guardrails.pipeline import make_guard
+    from shieldbench.targets.base import Reply
+
+    class Bot:
+        name = "fake:b"
+
+        def generate(self, messages):
+            return Reply(text="ok", in_tokens=0, out_tokens=0, cost_usd=0.0)
+    g = {"g1": make_guard("g1")}
+    plain = scan_bot({}, g, bot=Bot())
+    dis = scan_bot({}, g, bot=Bot(), disguises=True)
+    assert dis["attacks"] > 4 * plain["attacks"] and dis["disguises"] is True
+    lo, hi = dis["worked_ci"]["none"]
+    assert lo == 0.0 and 0 < hi < 10

@@ -198,7 +198,7 @@ def serve(p: Protector, port: int, site: str | None = None, target: str = "none"
         from .byobot import scan_bot
         keys = [k for k in (body.get("guards") or ["g1", "g2"]) if k in ("g1", "g2", "g3", "g4")][:4] or ["g2"]
         gs = {k: get_protector(k).guard for k in keys}
-        return scan_bot(body, gs, int(body.get("limit") or 0))
+        return scan_bot(body, gs, int(body.get("limit") or 0), disguises=bool(body.get("disguises")))
 
     class H(BaseHTTPRequestHandler):
         def _cors(self):

@@ -2,7 +2,7 @@
 
     scan_bot({"base_url": "http://localhost:11434/v1", "model": "gemma2:2b", "system_prompt": "You are ..."}, guards=["g1", "g2"])
 
-What it does: sends our 22 seed attacks (and 22 clean controls) to the bot WITH ITS OWN SYSTEM PROMPT, once. Because the model is run at
+What it does: sends our 22 seed attacks (and 22 harmless messages) to the bot WITH ITS OWN SYSTEM PROMPT, once. Because the model is run at
 temperature 0, an attack that a guard lets through gets exactly the same reply as with no guard, so each attack costs ONE model call and every
 guard is scored from that same reply. The judge is the rule judge (a marker word or a canary string appearing in the reply).
 
@@ -18,7 +18,7 @@ from .guardrails.base import Guard
 
 
 def _messages(system: str, attack) -> list:
-    m = build_messages(attack.text, attack.document)
+    m = build_messages(attack.text, attack.document, [dict(h) for h in attack.history])
     m[0] = {"role": "system", "content": system}
     return m
 
@@ -28,7 +28,7 @@ def _snip(s: str, n: int = 160) -> str:
     return s if len(s) <= n else s[:n] + "..."
 
 
-def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, progress=None) -> dict:
+def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, progress=None, disguises: bool = False) -> dict:
     """guards: {"g1": Guard, ...}. cfg: base_url, model, key?, system_prompt?. Returns a JSON-able report."""
     from .targets.openai_target import OpenAICompatTarget
     url = str(cfg.get("base_url", "")).strip()
@@ -39,6 +39,9 @@ def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, prog
     system = str(cfg.get("system_prompt", "")).strip() or fd.SYSTEM_PROMPT
     has_canary = any(c in system for c in fd.SECRET_CANARIES) or system == fd.SYSTEM_PROMPT
     attacks = [a for a in load() if has_canary or a.category not in ("prompt_extraction", "pii_leakage")]
+    if disguises:      # add the 5 disguises (base64, leetspeak, role-play, Hinglish prefix, multi-turn): about 5x more attacks
+        from .attacks import mutators
+        attacks = attacks + mutators.apply(attacks, list(mutators.MUTATORS))
     if limit:
         attacks = attacks[:limit]
     rows, errors = [], 0
@@ -70,12 +73,14 @@ def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, prog
     summary = {"none": sum(r["none"] for r in rows)}
     for k in guards:
         summary[k] = sum(r[k] for r in rows)
+    from .eval.metrics import wilson
+    ci = {k: [round(100 * x, 1) for x in wilson(v, n)[1:]] for k, v in summary.items()}
     cats = {}
     for r in rows:
         c = cats.setdefault(r["category"], {"n": 0, "none": 0})
         c["n"] += 1
         c["none"] += r["none"]
     return {"bot": getattr(bot, "name", "bot"), "attacks": n, "errors": errors, "worked": summary, "harmless_total": len(benign), "harmless_blocked": hb,
-            "by_category": cats, "scored_extraction": has_canary, "seconds": round(time.time() - t0, 1),
+            "by_category": cats, "worked_ci": ci, "disguises": disguises, "scored_extraction": has_canary, "seconds": round(time.time() - t0, 1),
             "worked_examples": [{"id": r["id"], "category": r["category"], "attack": r["text"], "reply": r["reply"]} for r in rows if r["none"]][:6],
             "guards": {k: g.name for k, g in guards.items()}}
