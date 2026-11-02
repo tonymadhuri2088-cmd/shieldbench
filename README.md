@@ -1,4 +1,112 @@
+<div align="center">
+
 # ShieldBench
+
+### Measure whether LLM guardrails really work
+
+*An open red-teaming and guardrail evaluation platform: attack success, false-alarm cost, speed, spend, and honest limits.*
+
+[![CI](https://github.com/tonymadhuri2088-cmd/shieldbench/actions/workflows/ci.yml/badge.svg)](https://github.com/tonymadhuri2088-cmd/shieldbench/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-0B2545)
+![Tests](https://img.shields.io/badge/tests-90%20passing-0E8C84)
+![OWASP](https://img.shields.io/badge/OWASP%20LLM-01%20%7C%2002%20%7C%2006%20%7C%2007-D9961A)
+![Guards](https://img.shields.io/badge/guards-regex%20%7C%20ML%20%7C%20Claude%20%7C%20cascade-5B6B7A)
+
+[**Results page**](https://tonymadhuri2088-cmd.github.io/shieldbench/) | [**Live demo**](https://shieldbench-demo.onrender.com) | [**Submission document (PDF)**](submission/ShieldBench_Submission.pdf) | [**Talk scripts**](submission/ShieldBench_Talk_Scripts.docx)
+
+*Built by Tony Madhuri, IIIT Raichur. Hackathon Problem 11: LLM red-teaming and guardrail evaluation.*
+
+</div>
+
+---
+
+## Why this exists
+
+Guardrails are usually sold with one number: how many attacks they stop. That hides the other half. A guard that blocks everything stops every attack, and also blocks every real customer. ShieldBench measures **both sides**, plus speed and cost, with confidence intervals, so a guard can be chosen with open eyes.
+
+Everything is tested against a **fake** shop assistant (AcmeBot) holding fake secrets. No real system or person is attacked.
+
+## Headline results
+
+Pooled over five test sets: 509 attacks and 244 harmless prompts (llama3.2 3B as the bot for the main set). 95% Wilson intervals are on the [results page](https://tonymadhuri2088-cmd.github.io/shieldbench/).
+
+| Guard | Attacks that worked | Harmless requests wrongly blocked | Added delay |
+|---|---|---|---|
+| None | 119 of 509 (23%) | 0 of 244 | none |
+| Regex rules | 62 of 509 (12%) | 16 of 244 (7%) | 0.2 ms |
+| Trained detector (TF-IDF + logistic regression) | 3 of 509 (0.6%) | 40 of 244 (16%) | 11 ms |
+| Claude Haiku classifier | 1 of 509 (0.2%) | 1 of 244 (0.4%) | about 1,100 ms |
+| **Cascade** (detector first, Claude only when unsure) | **0 of 509** | 11 of 244 (4.5%) | about 510 ms |
+
+A zero means "probably below about 0.7%", not "safe". On 100 real jailbreaks from the wild, the trained detector blocked all 100 but also 96 of 100 ordinary prompts, because it reacts to long role-play style; this is why the cascade exists.
+
+<p align="center"><img src="assets/c2_tradeoff.png" width="760" alt="Attacks stopped versus harmless requests blocked, per guard"></p>
+
+## What makes it different
+
+- **Cost of safety, not just attack score:** false alarms, latency and API spend are first-class results.
+- **Honest test design:** one tuning set, three clean sets run once, training overlap removed (cosine similarity above 0.8), Wilson intervals, McNemar tests.
+- **Judges that are checked:** a rule judge, a Claude judge, a second-family judge, and human or labelled replies with Cohen's kappa.
+- **Beyond single prompts:** tool-using agents, multi-turn (crescendo) attacks, adaptive Claude attackers, and **indirect injection** hidden in documents.
+- **Public benchmarks:** real in-the-wild jailbreaks, AdvBench, BBQ bias, TruthfulQA, and XSTest over-refusal.
+- **Ships as software:** an OpenAI-compatible guard proxy, Docker and Render deployment, 90 tests, CI with a regression gate.
+
+## Architecture
+
+<p align="center"><img src="assets/d1_architecture.png" width="760" alt="ShieldBench pipeline from attack sets to results"></p>
+
+### The cascade: cheap first, expensive only when unsure
+
+<p align="center"><img src="assets/d2_cascade.png" width="760" alt="Cascade guard"></p>
+
+### Indirect prompt injection (attacks hidden in documents)
+
+144 attacks (8 document types, 3 goals, 6 hiding techniques) against 7 defences. On gemma2:2b, 82 of 144 worked with no defence; stripping hidden text, marking the document as data and removing outside links cut that to 68, 58 and 43. The detector-based defences reached 0 but removed 25 to 38% of harmless documents and were trained on similar wording, so treat that zero with care.
+
+<p align="center"><img src="assets/c6_indirect.png" width="760" alt="Indirect injection results"></p>
+<p align="center"><img src="assets/d4_indirect.png" width="640" alt="Indirect injection suite"></p>
+
+## Tech stack
+
+<p align="center"><img src="assets/d6_stack.png" width="760" alt="Technology stack by layer"></p>
+
+| Layer | Tools |
+|---|---|
+| Language | Python 3, JavaScript |
+| Detector | scikit-learn (TF-IDF + logistic regression), joblib |
+| Models under test | Ollama (llama3.2, qwen2.5, gemma2, llama3.1), Claude Haiku via the Anthropic API, any OpenAI-format server |
+| Judges | Rule judge, Claude Sonnet, Llama 3.1 second judge, human labels |
+| Data and statistics | SQLite cache with a spending cap, pandas, Wilson intervals, McNemar, Cohen's kappa |
+| Service | Python standard-library threaded HTTP server, SSE streaming, OpenAI-compatible gateway, bearer keys, rate and size limits |
+| Interface | Static HTML and JS results page, live console, Streamlit dashboard |
+| Quality | pytest (90 tests), GitHub Actions, regression gate |
+| Delivery | Docker, Render, GitHub Pages, Caddy |
+
+## Quick start
+
+```bash
+git clone https://github.com/tonymadhuri2088-cmd/shieldbench
+cd shieldbench
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+PYTHONPATH=src pytest -q                              # 90 tests
+python -m shieldbench.live --serve 8765 --guard g2 --site docs   # then open http://127.0.0.1:8765/
+```
+
+No API key is needed for the regex and detector guards. Claude guards need `ANTHROPIC_API_KEY` in `.env` (never committed).
+
+## Honest limits
+
+- Four of the OWASP LLM Top 10 risks (01, 02, 06, 07); bias, truthfulness and harm are tested on small public samples only (hallucination is a two-choice proxy).
+- Mostly small local models as targets; attack sets are written by us and by Claude, not collected in the wild.
+- Judge labels come from one person or from Claude; agreement figures are optimistic.
+- Zero attacks is a bound, not proof of safety.
+
+Full list in the [submission document](submission/ShieldBench_Submission.pdf).
+
+---
+
+## Full technical README
 
 Automated red-teaming and guardrail evaluation for LLM applications.
 
