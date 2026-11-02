@@ -421,7 +421,7 @@ function renderPublic(){var L=D.public||[];if(!L.length)return;$("#pub-block").h
   $("#pub-g").innerHTML=h;
   var m="<tr><th>Model</th><th>Complied with harmful request (no guard)</th><th>Said 'unknown' on unclear bias question</th><th>Picked the stereotyped person</th><th>Chose the true statement</th></tr>";
   L.filter(function(r){return r.bias}).forEach(function(r){m+="<tr><td><b>"+esc(r.model)+"</b></td>"+c(r.harmful_complied.none)+c(r.bias.said_unknown)+c(r.bias.picked_stereotyped)+c(r.truth.chose_true)+"</tr>"});
-  $("#pub-m").innerHTML=m;$("#pub-note").textContent="Small samples (100, 100, 100, 90, 60). Harmful compliance is judged by refusal phrases. TruthfulQA is a two-choice test, a proxy for hallucination, not free text. Guards here are built for prompt injection, not harmful topics."}
+  $("#pub-m").innerHTML=m;$("#pub-note").textContent="Small samples (100, 100, 100, 90, 60). Harmful compliance is judged by refusal phrases. TruthfulQA is a two-choice test, a proxy for hallucination, not free text. Guards here are built for prompt injection, not harmful topics. The trained detector blocks nearly every ordinary prompt here because they are long role-play prompts, so its 100 of 100 on jailbreaks reflects style, not skill."}
 function renderIJ(){var J=D.indjudge;if(!J||!J.n)return;$("#ij-block").hidden=false;
   var h="<tr><th>Independent judge ("+esc(J.judge_model||"?")+") against</th><th>Replies</th><th>Agree</th><th>Kappa</th><th>Says success, they say no</th><th>Says fail, they say success</th></tr>";
   [["claude","Claude judge"],["rule","Rule judge"]].forEach(function(k){var r=J[k[0]];h+="<tr><td>"+k[1]+"</td><td class='mono'>"+J.n+"</td><td class='mono'>"+r.agree+" / "+J.n+"</td><td class='mono'>"+r.kappa+"</td><td class='mono'>"+r.local_says_success_judge_says_no+"</td><td class='mono'>"+r.local_says_fail_judge_says_success+"</td></tr>"});
@@ -533,6 +533,3 @@ function boot(d){
 fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(boot).catch(function(){document.querySelector("main").insertAdjacentHTML("afterbegin","<p style='color:var(--fail)'>data.json could not be loaded. Run python -m shieldbench.export_site and serve the docs folder.</p>")});
 })();
 </script>
-
-<a href="https://shieldbench-demo.onrender.com" target="_blank" rel="noopener" style="position:fixed;right:14px;bottom:14px;z-index:50;background:#1f6feb;color:#fff;padding:10px 14px;border-radius:10px;font:600 14px system-ui,sans-serif;text-decoration:none;box-shadow:0 2px 10px rgba(0,0,0,.35)">Try the live demo &rarr;</a>
-<script>(function(){var u="https://shieldbench-demo.onrender.com/api/health";function p(){try{fetch(u,{mode:"no-cors",cache:"no-store"}).catch(function(){});}catch(e){}}p();setInterval(p,240000);})();</script>
