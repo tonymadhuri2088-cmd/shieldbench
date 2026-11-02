@@ -462,7 +462,7 @@ function renderStatic(){
 function setStatus(on,msg){online=on;$("#dot").className="dot "+(on?"on":"off");$("#stat").textContent=msg}
 var SAME=location.protocol.indexOf("http")===0&&!/github\.io$/.test(location.hostname);   /* served by the ShieldBench server itself (localhost or a tunnel address) */
 function probe(){
-  var bases=[SAME?"":null,"http://127.0.0.1:8765"].filter(function(x){return x!==null});
+  var bases=[SAME?"":null,"http://127.0.0.1:8765","https://shieldbench-demo.onrender.com"].filter(function(x){return x!==null});
   (function next(i){
     if(i>=bases.length){setStatus(false,"live backend: not running");$("#offline").hidden=false;$("#console").style.opacity=.55;return}
     fetch(bases[i]+"/api/health").then(function(r){return r.json()}).then(function(h){
