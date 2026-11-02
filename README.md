@@ -28,7 +28,6 @@
 | Results page with charts and tables | https://tonymadhuri2088-cmd.github.io/shieldbench/ |
 | Live demo (try a guard on your own message) | https://shieldbench-demo.onrender.com (free tier: the first load can take about 50 seconds) |
 | Full write-up: what was built, tech stack, diagrams, results, limits (14 pages) | [`submission/ShieldBench_Submission.pdf`](submission/ShieldBench_Submission.pdf) (editable: [`.docx`](submission/ShieldBench_Submission.docx)) |
-| Talk scripts, slide outline, Q&A | [`submission/ShieldBench_Talk_Scripts.docx`](submission/ShieldBench_Talk_Scripts.docx) |
 | Tests and CI | 90 tests, GitHub Actions on every push (badge above) |
 | Public datasets used | XSTest, BBQ (CC BY 4.0); AdvBench, jailbreak_llms (MIT); TruthfulQA (Apache 2.0) |
 
@@ -550,5 +549,3 @@ Limits: the guards are built for prompt injection, not for harmful topics; harmf
 
 The hackathon submission write-up (what was built, the tech stack, diagrams, results, limits and the rubric mapping) is in `submission/`:
 
-- `submission/ShieldBench_Submission.pdf` (and the editable `.docx`)
-- `submission/ShieldBench_Talk_Scripts.docx` (5-minute and 2-minute talk scripts, slide outline, Q&A)
