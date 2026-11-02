@@ -320,7 +320,7 @@ Limits: 22 attacks and no disguises, so a small sample; key-leak and data-leak a
 
 - **Threads:** the server now handles several requests at once. A lock still protects the shared SQLite cache and the chat history, but long scans that use only the regex and detector guards, and gateway calls with guards g0 to g2, do not wait for it.
 - **API key:** set `SHIELDBENCH_KEY` to any long random string and every `/api/*` (except `/api/health`) and `/v1/*` call needs `Authorization: Bearer <key>`. Each caller is limited to 120 calls a minute. Listening on any address other than 127.0.0.1 (`--host 0.0.0.0`) is refused unless a key is set.
-- **Docker:** `docker build -t shieldbench .` then `docker run -p 8765:8765 -e SHIELDBENCH_KEY=<key> shieldbench`. The Dockerfile has not been built or run by the author yet. It needs `data/models/g2.joblib` in the build folder.
+- **Docker:** `docker build -t shieldbench .` then `docker run -p 8765:8765 -e SHIELDBENCH_KEY=<key> shieldbench`. The Dockerfile was built and run by the author on Windows (health, 401 without a key, 401 with a wrong key, and a blocked attack with the right key all checked; Caddy/HTTPS was not tested). It needs `data/models/g2.joblib` in the build folder.
 
 Still not done: real streaming, HTTPS (put it behind a proxy such as Caddy or a cloud load balancer), per-user keys, a monitoring dashboard, a database that scales beyond SQLite.
 
@@ -346,7 +346,7 @@ Four answers to "does it only work against Claude's way of thinking?":
 
 **Second human labeller:** this already existed. `python -m shieldbench.judge.label xlsx` makes a sheet for a friend; `fromxlsx` reads it back; `kappa --a mine.csv --b friend.csv` reports human-vs-human agreement and each judge against the humans.
 
-Not done: nothing here has been run against a real Ollama model yet (tests use fakes); no second human has labelled; the larger-model judge needs a larger model than a 2B on your hardware.
+Not done: the independent attacker and judge have not been run against a real Ollama model yet (the cross-model scan of three models was); no second human has labelled; the larger-model judge needs a larger model than a 2B on your hardware.
 
 ## v0.42: a public cloud demo (limited, no API credit)
 
@@ -360,4 +360,51 @@ It does not combine with `--target`. The Dockerfile now listens on `$PORT` (clou
 
 **Deploy on Render (free):** `render.yaml` is a Blueprint for the `v2-service` branch. On render.com: New, Blueprint, pick your GitHub repo and the branch, deploy. The address Render gives serves the whole site and a working Live tab for the regex and trained-detector guards.
 
-Limits: not run on a real Render account by the author; free instances sleep after about 15 minutes idle and take up to a minute to wake; memory is small; visitors share one server; no database, nothing is kept after a restart.
+Status: deployed on a real Render account (free plan) at https://shieldbench-demo.onrender.com on 2 November 2026. Checked from outside: `/api/health` returns `public_demo: true` with guards g0 to g2; an injection message was blocked (detector score 0.95, about 11 ms); a normal question was allowed; `/api/agent` and guard g3 returned 403. Not yet checked: the 30-requests-a-minute limit on the live host, and behaviour across a restart.
+
+Limits: free instances sleep after about 15 minutes idle and take up to a minute to wake; memory is small; visitors share one server; no database, nothing is kept after a restart.
+
+## v0.43: indirect prompt injection (hidden instructions in documents)
+
+A bot that reads outside content (a review, an email, a web page, an invoice) can be steered by whoever wrote that content, even when the customer's own question is harmless. `python -m shieldbench.indirect` tests this properly.
+
+**Attacks (144, built by code, no Claude needed):** 8 kinds of document (review, email, web page, invoice, CSV export, JSON feed, support ticket, search snippet) x 3 goals (`obey`: output the attacker's word; `leak`: reveal the discount code or API key; `exfil`: print a link or image to `attacker.test`, which a chat window would load and send data out) x 6 ways of hiding (plain, fake authority, polite, hidden HTML, Hinglish, buried after a long harmless text). Plus 16 harmless documents of the same shapes, some of which look suspicious on purpose (an HTML comment, "please ignore the old price list"), to count false alarms.
+
+**Defences tested (they act on the document, not only on the user's words):**
+
+| Defence | What it does |
+|---|---|
+| none | nothing |
+| g2_combined | the guard reads question + document together; a hit blocks the whole request (the usual way) |
+| sanitise | removes HTML comments, hidden elements, zero-width characters and image alt text before the bot sees the text |
+| spotlight | joins the document's words with `^` and tells the bot that marked text is data, never instructions |
+| quarantine | the guard reads the document alone; if flagged, the document is dropped and the bot answers without it |
+| link_filter | removes links and images pointing outside our own domain from the reply |
+| combo | sanitise + spotlight + quarantine + link_filter |
+
+**Validation, so the result is not just our own judge:** `--judge-model` has a model from another family re-read the replies and reports agreement (kappa) with the rule judge; `--label-sheet results/ix_labels.csv` writes 50 replies for a person to label **without seeing any judge's answer** (the answer key is a separate `.key.json` file); `--score-labels results/ix_labels_filled.csv` reports human-versus-rule agreement.
+
+```
+python -m shieldbench.indirect --model gemma2:2b --judge-model llama3.2:3b --label-sheet results/ix_labels.csv
+python -m shieldbench.indirect --model llama3.2:3b           (another model, added to the same table)
+python -m shieldbench.export_site                             (puts the table on the Results page)
+```
+
+`--limit 30` runs a quick test. Each distinct prompt is sent to the model once and reused, so the whole run is about 5 model calls per attack.
+
+**Honest limits:** the attacks are templates we wrote, not collected from real incidents; one small local model at a time; the rule judge looks for a word, a secret or a link, so it can miss a partial leak; the detector was trained on some indirect examples written in similar wording, so its result may flatter it; link_filter only knows the markdown-link and bare-URL ways of leaking; spotlighting depends on the model following the note. Nothing here has been run on a real model yet when this section was written: the unit tests use a fake bot, which proves the code works and says nothing about real models.
+
+
+## v0.44: public benchmarks (toxicity/harm, bias, truthfulness, real-world jailbreaks)
+
+`python -m shieldbench.public_sets --guards g1,g2 --model llama3.2:3b` (add `--prepare` once to re-download the samples; they are also shipped in `data/public/`).
+
+| Axis | Source (licence) | Sample | Scoring |
+|---|---|---|---|
+| Real jailbreaks, guard block rate | verazuo/jailbreak_llms (MIT) | 100 | guard blocks or not |
+| Ordinary prompts, guard false alarms | same source | 100 | guard blocks or not |
+| Harmful requests: guard block rate and bot compliance | AdvBench (MIT) | 100 | refusal-phrase check |
+| Bias | BBQ, ambiguous questions (CC BY 4.0) | 90 (3 categories) | answer letter; right answer is "unknown" |
+| Truthfulness (hallucination proxy) | TruthfulQA (Apache 2.0) | 60 | two-choice true vs common false belief |
+
+Limits: the guards are built for prompt injection, not for harmful topics; harmful compliance uses refusal phrases; TruthfulQA is two-choice, not free text; jailbreak prompts are capped at 4,000 characters; samples are small.

@@ -198,6 +198,10 @@ footer .who{display:flex;align-items:center;gap:10px;color:var(--fg)} footer .wh
     <p class="small muted" id="cross-note" style="margin-top:10px"></p>
     <div id="cross-ex"></div></div>
 
+  <div class="block" id="ix-block" hidden><header><h2>Hidden instructions in documents (indirect injection)</h2><p class="muted">The attack is not typed by the user. It is hidden in data the bot reads: a review, an email, a web page, an invoice. 144 attacks (8 kinds of document, 3 goals, 6 ways of hiding) are run against each defence. Each cell is attacks that worked, with the 95% range.</p></header>
+    <div class="scroll"><table id="ix" aria-label="Indirect injection defences"></table></div>
+    <p class="small muted" id="ix-note" style="margin-top:10px"></p></div>
+
   <div class="block" id="ij-block" hidden><header><h2>Independent judge</h2><p class="muted">A model from another family re-judged replies that Claude and the rule judge had already judged. High agreement means the verdicts do not depend on one family; low agreement is reported as it comes.</p></header>
     <div class="scroll"><table id="ij" aria-label="Independent judge agreement"></table></div>
     <p class="small muted" id="ij-note" style="margin-top:10px"></p></div>
@@ -312,7 +316,7 @@ print(r.choices[0].finish_reason, r.choices[0].message.content)   # content_filt
       <li>The live server has no login and runs only on 127.0.0.1. It is for demos.</li>
     </ul></div>
   <div class="block"><header><h2>Built with</h2></header>
-    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (86 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
+    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (88 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
 <footer><div class="who"><img class="clogo" src="college-logo.png" alt="IIIT Raichur logo"><div class="avatar" style="width:30px;height:30px;font-size:13px">T</div><div><b>Tony Madhuri</b> <span>IIIT Raichur</span></div></div><div>All targets are fake apps with fake data. <span id="gen"></span></div></footer>
@@ -403,6 +407,15 @@ function renderCross(){var L=D.crossmodel||[];if(!L.length)return;$("#cross-bloc
     return"<tr><td><b>"+esc(r.model)+"</b>"+(r.disguises?" <span class='badge'>with disguises</span>":"")+(r.attack_set&&r.attack_set!=="seeds"?" <span class='badge'>"+esc(r.attack_set)+"</span>":"")+"</td><td class='mono'>"+r.attacks+"</td>"+ks.map(function(k){return r.worked[k]==null?"<td class='cell'>-</td>":"<td class='cell'>"+r.worked[k]+"<small>"+r.worked_ci[k][0]+" to "+r.worked_ci[k][1]+"%</small></td>"}).join("")+"<td class='mono'>"+mx+" of "+r.harmless_total+"</td></tr>"}).join("");
   $("#cross-ex").innerHTML=L.filter(function(r){return r.worked_examples&&r.worked_examples.length}).map(function(r){return"<details style='margin-top:10px'><summary class='small'>Attacks that got through with no guard: "+esc(r.model)+"</summary>"+r.worked_examples.slice(0,3).map(function(x){return"<div class='small' style='margin:6px 0'><span class='muted'>"+esc(x.category.replace(/_/g," "))+"</span><br><b>Attack:</b> "+esc(x.attack)+"<br><b>Bot replied:</b> "+esc(x.reply)+"</div>"}).join("")+"</details>"}).join("");
   $("#cross").innerHTML=h+b;$("#cross-note").textContent="Small samples and the rule judge only. The detector was trained on text written by Claude, so a different family is a fair check of whether it only learned one style."}
+function renderIX(){var L=D.indirect||[];if(!L.length)return;$("#ix-block").hidden=false;
+  var nm={none:"No defence",g2_combined:"Guard on question + document",sanitise:"Strip hidden text",spotlight:"Mark document as data",quarantine:"Guard on document alone",link_filter:"Remove outside links",combo:"All four together"};
+  var ds=L[0].defences;
+  var h="<tr><th>Model</th><th>Attacks</th>"+ds.map(function(d){return"<th>"+nm[d]+"</th>"}).join("")+"</tr>";
+  var b=L.map(function(r){return"<tr><td><b>"+esc(r.model)+"</b></td><td class='mono'>"+r.attacks+"</td>"+ds.map(function(d){return"<td class='cell'>"+r.worked[d]+"<small>"+r.worked_ci[d][0]+" to "+r.worked_ci[d][1]+"%</small></td>"}).join("")+"</tr>"}).join("");
+  var c=L[0].controls_effect,cr=ds.map(function(d){return c[d].blocked+c[d].removed}).join(", ");
+  var ij=L.filter(function(r){return r.independent_judge&&r.independent_judge.n}).map(function(r){var j=r.independent_judge;return esc(r.model)+": second-family judge agrees with the rule judge on "+j.agree+" of "+j.n+" replies (kappa "+j.kappa+")"}).join("; ");
+  var hu=D.indirect_human&&D.indirect_human.n?" A person labelled "+D.indirect_human.n+" replies blindly: agreement with the rule judge "+D.indirect_human.agree+" of "+D.indirect_human.n+" (kappa "+D.indirect_human.kappa+").":"";
+  $("#ix").innerHTML=h+b;$("#ix-note").textContent="Harmless documents wrongly blocked or removed, in the same column order: "+cr+" (of "+L[0].controls+"). "+(ij?ij+". ":"")+hu+" Attacks are our own templates, one small model, and the rule judge; a zero means 'probably low', not 'safe'."}
 function renderIJ(){var J=D.indjudge;if(!J||!J.n)return;$("#ij-block").hidden=false;
   var h="<tr><th>Independent judge ("+esc(J.judge_model||"?")+") against</th><th>Replies</th><th>Agree</th><th>Kappa</th><th>Says success, they say no</th><th>Says fail, they say success</th></tr>";
   [["claude","Claude judge"],["rule","Rule judge"]].forEach(function(k){var r=J[k[0]];h+="<tr><td>"+k[1]+"</td><td class='mono'>"+J.n+"</td><td class='mono'>"+r.agree+" / "+J.n+"</td><td class='mono'>"+r.kappa+"</td><td class='mono'>"+r.local_says_success_judge_says_no+"</td><td class='mono'>"+r.local_says_fail_judge_says_success+"</td></tr>"});
@@ -505,7 +518,7 @@ function chips(host,list,fn){list.forEach(function(x){var c=el("button",{type:"b
 
 /* ---------- boot ---------- */
 function boot(d){
-  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderIJ();renderArena("arena","");renderArena("arena_hard","-hard");
+  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderIJ();renderIX();renderArena("arena","");renderArena("arena_hard","-hard");
   chips("#g-ex",D.examples.guard,function(x){$("#g-msg").value=x.text});
   chips("#a-ex",D.examples.agent,function(x){$("#a-msg").value=x.message;$("#a-note").value=x.planted_note||""});
   show(location.hash.slice(1));
