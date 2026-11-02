@@ -202,6 +202,11 @@ footer .who{display:flex;align-items:center;gap:10px;color:var(--fg)} footer .wh
     <div class="scroll"><table id="ix" aria-label="Indirect injection defences"></table></div>
     <p class="small muted" id="ix-note" style="margin-top:10px"></p></div>
 
+  <div class="block" id="pub-block" hidden><header><h2>Public benchmarks (not written by us)</h2><p class="muted">Real jailbreak prompts collected in the wild (verazuo/jailbreak_llms, MIT), harmful requests (AdvBench, MIT), bias questions (BBQ, CC BY 4.0) and truthfulness questions (TruthfulQA, Apache 2.0). Guards were built for prompt injection, so a low block rate on harmful requests is expected and is shown, not hidden.</p></header>
+    <div class="scroll"><table id="pub-g" aria-label="Guards on public prompts"></table></div>
+    <div class="scroll"><table id="pub-m" aria-label="Bot on harmful, bias and truth tests"></table></div>
+    <p class="small muted" id="pub-note" style="margin-top:10px"></p></div>
+
   <div class="block" id="ij-block" hidden><header><h2>Independent judge</h2><p class="muted">A model from another family re-judged replies that Claude and the rule judge had already judged. High agreement means the verdicts do not depend on one family; low agreement is reported as it comes.</p></header>
     <div class="scroll"><table id="ij" aria-label="Independent judge agreement"></table></div>
     <p class="small muted" id="ij-note" style="margin-top:10px"></p></div>
@@ -316,7 +321,7 @@ print(r.choices[0].finish_reason, r.choices[0].message.content)   # content_filt
       <li>The live server has no login and runs only on 127.0.0.1. It is for demos.</li>
     </ul></div>
   <div class="block"><header><h2>Built with</h2></header>
-    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (88 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
+    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (90 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
 <footer><div class="who"><img class="clogo" src="college-logo.png" alt="IIIT Raichur logo"><div class="avatar" style="width:30px;height:30px;font-size:13px">T</div><div><b>Tony Madhuri</b> <span>IIIT Raichur</span></div></div><div>All targets are fake apps with fake data. <span id="gen"></span></div></footer>
@@ -416,6 +421,14 @@ function renderIX(){var L=D.indirect||[];if(!L.length)return;$("#ix-block").hidd
   var ij=L.filter(function(r){return r.independent_judge&&r.independent_judge.n}).map(function(r){var j=r.independent_judge;return esc(r.model)+": second-family judge agrees with the rule judge on "+j.agree+" of "+j.n+" replies (kappa "+j.kappa+")"}).join("; ");
   var hu=D.indirect_human&&D.indirect_human.n?" A person labelled "+D.indirect_human.n+" replies blindly: agreement with the rule judge "+D.indirect_human.agree+" of "+D.indirect_human.n+" (kappa "+D.indirect_human.kappa+").":"";
   $("#ix").innerHTML=h+b;$("#ix-note").textContent="Harmless documents wrongly blocked or removed, in the same column order: "+cr+" (of "+L[0].controls+"). "+(ij?ij+". ":"")+hu+" Attacks are our own templates, one small model, and the rule judge; a zero means 'probably low', not 'safe'."}
+function renderPublic(){var L=D.public||[];if(!L.length)return;$("#pub-block").hidden=false;
+  var gn={g1:"Regex rules",g2:"Trained detector",g3:"Claude guard",g4:"Cascade"},c=function(r){return"<td class='cell'>"+r.k+" / "+r.n+"<small>"+r.lo+" to "+r.hi+"%</small></td>"};
+  var h="<tr><th>Guard</th><th>Real jailbreaks blocked (good)</th><th>Ordinary prompts blocked (bad)</th><th>Harmful requests blocked</th></tr>",seen={};
+  L.forEach(function(r){Object.keys(r.guards||{}).forEach(function(g){if(seen[g])return;seen[g]=1;var x=r.guards[g];h+="<tr><td>"+(gn[g]||g)+"</td>"+c(x.jailbreak)+c(x.overblock)+c(x.harmful_blocked)+"</tr>"})});
+  $("#pub-g").innerHTML=h;
+  var m="<tr><th>Model</th><th>Complied with harmful request (no guard)</th><th>Said 'unknown' on unclear bias question</th><th>Picked the stereotyped person</th><th>Chose the true statement</th></tr>";
+  L.filter(function(r){return r.bias}).forEach(function(r){m+="<tr><td><b>"+esc(r.model)+"</b></td>"+c(r.harmful_complied.none)+c(r.bias.said_unknown)+c(r.bias.picked_stereotyped)+c(r.truth.chose_true)+"</tr>"});
+  $("#pub-m").innerHTML=m;$("#pub-note").textContent="Small samples (100, 100, 100, 90, 60). Harmful compliance is judged by refusal phrases. TruthfulQA is a two-choice test, a proxy for hallucination, not free text. Guards here are built for prompt injection, not harmful topics."}
 function renderIJ(){var J=D.indjudge;if(!J||!J.n)return;$("#ij-block").hidden=false;
   var h="<tr><th>Independent judge ("+esc(J.judge_model||"?")+") against</th><th>Replies</th><th>Agree</th><th>Kappa</th><th>Says success, they say no</th><th>Says fail, they say success</th></tr>";
   [["claude","Claude judge"],["rule","Rule judge"]].forEach(function(k){var r=J[k[0]];h+="<tr><td>"+k[1]+"</td><td class='mono'>"+J.n+"</td><td class='mono'>"+r.agree+" / "+J.n+"</td><td class='mono'>"+r.kappa+"</td><td class='mono'>"+r.local_says_success_judge_says_no+"</td><td class='mono'>"+r.local_says_fail_judge_says_success+"</td></tr>"});
@@ -518,7 +531,7 @@ function chips(host,list,fn){list.forEach(function(x){var c=el("button",{type:"b
 
 /* ---------- boot ---------- */
 function boot(d){
-  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderIJ();renderIX();renderArena("arena","");renderArena("arena_hard","-hard");
+  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderIJ();renderIX();renderPublic();renderArena("arena","");renderArena("arena_hard","-hard");
   chips("#g-ex",D.examples.guard,function(x){$("#g-msg").value=x.text});
   chips("#a-ex",D.examples.agent,function(x){$("#a-msg").value=x.message;$("#a-note").value=x.planted_note||""});
   show(location.hash.slice(1));
@@ -528,5 +541,7 @@ fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.js
 })();
 </script>
 
+<a href="https://shieldbench-demo.onrender.com" target="_blank" rel="noopener" style="position:fixed;right:14px;bottom:14px;z-index:50;background:#1f6feb;color:#fff;padding:10px 14px;border-radius:10px;font:600 14px system-ui,sans-serif;text-decoration:none;box-shadow:0 2px 10px rgba(0,0,0,.35)">Try the live demo &rarr;</a>
+<script>(function(){var u="https://shieldbench-demo.onrender.com/api/health";function p(){try{fetch(u,{mode:"no-cors",cache:"no-store"}).catch(function(){});}catch(e){}}p();setInterval(p,240000);})();</script>
 </body>
 </html>
