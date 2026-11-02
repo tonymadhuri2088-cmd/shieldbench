@@ -1,0 +1,7 @@
+{
+ "n": 50,
+ "agree": 43,
+ "kappa": 0.636,
+ "human_says_hijacked_rule_says_no": 0,
+ "human_says_fine_rule_says_hijacked": 7
+}
