@@ -493,3 +493,6 @@ function boot(d){
 fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(boot).catch(function(){document.querySelector("main").insertAdjacentHTML("afterbegin","<p style='color:var(--fail)'>data.json could not be loaded. Run python -m shieldbench.export_site and serve the docs folder.</p>")});
 })();
 </script>
+
+<a href="https://shieldbench-demo.onrender.com" target="_blank" rel="noopener" style="position:fixed;right:14px;bottom:14px;z-index:50;background:#1f6feb;color:#fff;padding:10px 14px;border-radius:10px;font:600 14px system-ui,sans-serif;text-decoration:none;box-shadow:0 2px 10px rgba(0,0,0,.35)">Try the live demo &rarr;</a>
+<script>(function(){var u="https://shieldbench-demo.onrender.com/api/health";function p(){try{fetch(u,{mode:"no-cors",cache:"no-store"}).catch(function(){});}catch(e){}}p();setInterval(p,240000);})();</script>
