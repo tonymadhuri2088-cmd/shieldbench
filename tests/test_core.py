@@ -1255,3 +1255,69 @@ def test_improve_verdict_rejects_a_detector_that_flags_the_script():
     assert not ok and any("harmless native" in w for w in why)
     good = dict(sets=sets, native=dict(old=dict(attacks=20, caught=8, harmless=30, blocked=1), new=dict(attacks=20, caught=18, harmless=30, blocked=2)))
     assert improve.verdict(good)[0]
+
+
+def test_zero_ceiling_matches_the_numbers_we_quote():
+    from shieldbench.independent import zero_ceiling
+    t = {r["attacks"]: r["upper_percent"] for r in zero_ceiling()}
+    assert t[124] == 3.0 and t[40] == 8.8 and t[20] == 16.1 and t[1000] < t[300] < t[124]
+
+
+def test_local_attacks_use_their_own_ids_and_keep_markers():
+    import json
+    from shieldbench import independent
+    from shieldbench.attacks.library import ATTACKS
+
+    def ask(system, user):                      # a fake non-Claude writer: keeps the marker if the seed has one
+        mk = [a.marker for a in ATTACKS if a.marker and (a.marker in user)]
+        tag = (mk[0] + " ") if mk else ""
+        return json.dumps([f"{tag}variant one of: {user[:30]}", f"{tag}another version of: {user[:30]}"])
+    v = independent.local_attacks(ask, per_seed=2)
+    assert len(v) >= 22 and all(a.id.startswith("loc-") for a in v)
+    assert all((not a.marker) or a.marker in (a.text + (a.document or "")) for a in v)
+
+
+def test_independent_judge_reports_agreement_and_survives_unreadable_replies():
+    from shieldbench import independent
+    from shieldbench.attacks.library import ATTACKS
+    a0 = ATTACKS[0]
+    rows = [dict(attack=a0, response="PWNED", claude=1, rule=1), dict(attack=a0, response="no", claude=0, rule=0),
+            dict(attack=a0, response="odd", claude=1, rule=0), dict(attack=a0, response="x", claude=0, rule=0)]
+    said = iter(['{"success": true, "reason": "a"}', '{"success": false, "reason": "b"}', '{"success": false, "reason": "c"}', "not json at all"])
+    rep = independent.judge_rows(rows, lambda s, u: next(said))
+    assert rep["n"] == 3 and rep["unparseable"] == 1
+    assert rep["claude"]["agree"] == 2 and rep["rule"]["agree"] == 3
+    assert rep["claude"]["local_says_fail_judge_says_success"] == 1 and rep["disagreements"][0]["id"] == a0.id
+
+
+def test_byobot_scans_several_models_on_an_independent_attack_file(tmp_path, monkeypatch):
+    import json
+    import sys
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from shieldbench import byobot, independent, export_site
+    from shieldbench.attacks.library import ATTACKS
+
+    class Bot(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            b = json.dumps({"choices": [{"message": {"content": "PWNED-4821"}}]}).encode()
+            self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+    port = _free_port()
+    srv = HTTPServer(("127.0.0.1", port), Bot)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    ask = lambda s, u: json.dumps([f"{(next((a.marker for a in ATTACKS if a.marker and a.marker in u), '') or '')} reworded: {u[:25]}"])
+    f = tmp_path / "variants_local.json"
+    independent.main(["attacks", "--model", "m", "--per-seed", "1", "--out", str(f)], ask=ask)
+    out = tmp_path / "crossmodel.json"
+    monkeypatch.setattr(sys, "argv", ["byobot", "--url", f"http://127.0.0.1:{port}/v1", "--models", "m-a,m-b", "--attack-file", str(f), "--guards", "g1", "--out", str(out)])
+    byobot.main()
+    srv.shutdown()
+    rows = json.loads(out.read_text())
+    assert [r["model"] for r in rows] == ["m-a", "m-b"] and all(r["attack_set"] == "variants_local" for r in rows)
+    (tmp_path / "independent_judge.json").write_text(json.dumps({"n": 2, "unparseable": 0, "judge_model": "m", "claude": {"agree": 2, "kappa": 1.0, "local_says_success_judge_says_no": 0, "local_says_fail_judge_says_success": 0}, "rule": {"agree": 2, "kappa": 1.0, "local_says_success_judge_says_no": 0, "local_says_fail_judge_says_success": 0}}))
+    data = export_site.build(tmp_path, tmp_path / "data.json", examples=False)
+    assert data["crossmodel"][0]["attack_set"] == "variants_local" and data["indjudge"]["n"] == 2

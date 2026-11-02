@@ -334,3 +334,16 @@ Still not done: real streaming, HTTPS (put it behind a proxy such as Caddy or a 
 - **HTTPS:** `docker-compose.yml` + `Caddyfile` put Caddy in front.
 
 Not verified: improve.py has only run against a fake Claude in tests (the real run costs API credit and its quality is unmeasured); the Docker and Caddy files have never been built or run; SQLite is still the only store; no monitoring dashboard.
+
+## v0.41: independent attacker and judge, bigger sets, many models
+
+Four answers to "does it only work against Claude's way of thinking?":
+
+1. **Independent attacker** (`shieldbench.independent attacks`): a model from another family (any OpenAI-format server, e.g. Ollama gemma2) rewrites the 22 seed attacks, `--per-seed 10` gives about 220 attacks. Ids start with `loc-`. Output: `data/generated/variants_local.json`.
+2. **Independent judge** (`shieldbench.independent judge --db results/<run>.db --model gemma2:2b --limit 100`): re-judges replies that Claude and the rule judge already judged and reports agreement and kappa to `results/independent_judge.json`; the Results page shows it under "Independent judge". A 2B model is a weak judge, so low agreement mostly says that. A larger model from another family is the real test.
+3. **Bigger test sets and what they buy** (`shieldbench.independent ceiling`): if none of N attacks works, the true rate could still be as high as 16.1% (N=20), 8.8% (40), 3.0% (124), 1.3% (300), 0.8% (500), 0.4% (1000).
+4. **Many models, one table**: `python -m shieldbench.byobot --models gemma2:2b,llama3.2:3b,qwen2.5:3b --disguises --guards g1,g2,g4` and add `--attack-file data/generated/variants_local.json` to use the independent attack set. Results are saved after every model. The Results page now also lists a few attacks that got through with no guard.
+
+**Second human labeller:** this already existed. `python -m shieldbench.judge.label xlsx` makes a sheet for a friend; `fromxlsx` reads it back; `kappa --a mine.csv --b friend.csv` reports human-vs-human agreement and each judge against the humans.
+
+Not done: nothing here has been run against a real Ollama model yet (tests use fakes); no second human has labelled; the larger-model judge needs a larger model than a 2B on your hardware.

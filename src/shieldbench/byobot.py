@@ -28,7 +28,7 @@ def _snip(s: str, n: int = 160) -> str:
     return s if len(s) <= n else s[:n] + "..."
 
 
-def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, progress=None, disguises: bool = False) -> dict:
+def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, progress=None, disguises: bool = False, attacks=None) -> dict:
     """guards: {"g1": Guard, ...}. cfg: base_url, model, key?, system_prompt?. Returns a JSON-able report."""
     from .targets.openai_target import OpenAICompatTarget
     url = str(cfg.get("base_url", "")).strip()
@@ -38,7 +38,7 @@ def scan_bot(cfg: dict, guards: dict[str, Guard], limit: int = 0, bot=None, prog
         bot = OpenAICompatTarget(url, str(cfg.get("model", "")).strip() or None, str(cfg.get("key", "")))
     system = str(cfg.get("system_prompt", "")).strip() or fd.SYSTEM_PROMPT
     has_canary = any(c in system for c in fd.SECRET_CANARIES) or system == fd.SYSTEM_PROMPT
-    attacks = [a for a in load() if has_canary or a.category not in ("prompt_extraction", "pii_leakage")]
+    attacks = [a for a in (list(attacks) if attacks else load()) if has_canary or a.category not in ("prompt_extraction", "pii_leakage")]
     if disguises:      # add the 5 disguises (base64, leetspeak, role-play, Hinglish prefix, multi-turn): about 5x more attacks
         from .attacks import mutators
         attacks = attacks + mutators.apply(attacks, list(mutators.MUTATORS))
@@ -95,7 +95,9 @@ def main():
     from pathlib import Path
     ap = argparse.ArgumentParser(description=main.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--url", default="http://localhost:11434/v1")
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", default="", help="one model name")
+    ap.add_argument("--models", default="", help="several models, comma separated; each is scanned and saved in turn")
+    ap.add_argument("--attack-file", default="", help="scan a different attack set, e.g. data/generated/variants_local.json (written by shieldbench.independent attacks)")
     ap.add_argument("--key", default="")
     ap.add_argument("--system-prompt-file", default="", help="your bot's system prompt (default: AcmeBot's)")
     ap.add_argument("--guards", default="g1,g2")
@@ -112,17 +114,28 @@ def main():
         Path("results").mkdir(exist_ok=True)
         store, tracker = Store("results/live.db"), CostTracker(a.budget)
     guards = {k: make_guard(k, store=store, tracker=tracker) for k in keys}
-    cfg = {"base_url": a.url, "model": a.model, "key": a.key}
-    if a.system_prompt_file:
-        cfg["system_prompt"] = Path(a.system_prompt_file).read_text(encoding="utf-8")
-    rep = scan_bot(cfg, guards, disguises=a.disguises, progress=lambda i, n: print(f"\r{i}/{n} attacks", end="", flush=True))
-    print()
+    models = [m.strip() for m in (a.models or a.model).split(",") if m.strip()]
+    if not models:
+        raise SystemExit("give --model NAME or --models A,B,C")
+    attacks, set_name = None, "seeds"
+    if a.attack_file:
+        from .attacks.generate import load_generated
+        attacks, set_name = load_generated(a.attack_file), Path(a.attack_file).stem
+        if not attacks:
+            raise SystemExit(f"no attacks found in {a.attack_file}")
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    allr = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
-    allr = [r for r in allr if r.get("model") != a.model] + [dict(rep, model=a.model, custom_prompt=bool(a.system_prompt_file))]
-    out.write_text(json.dumps(allr, indent=1), encoding="utf-8")
-    print(f"{a.model}: {rep['attacks']} attacks; worked {rep['worked']}; harmless blocked {rep['harmless_blocked']} of {rep['harmless_total']}; saved to {out}")
+    for model in models:
+        cfg = {"base_url": a.url, "model": model, "key": a.key}
+        if a.system_prompt_file:
+            cfg["system_prompt"] = Path(a.system_prompt_file).read_text(encoding="utf-8")
+        print(f"--- {model}")
+        rep = scan_bot(cfg, guards, disguises=a.disguises, attacks=attacks, progress=lambda i, n: print(f"\r{i}/{n} attacks", end="", flush=True))
+        print()
+        allr = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
+        allr = [r for r in allr if not (r.get("model") == model and r.get("attack_set", "seeds") == set_name)] + [dict(rep, model=model, attack_set=set_name, custom_prompt=bool(a.system_prompt_file))]
+        out.write_text(json.dumps(allr, indent=1), encoding="utf-8")       # saved after every model, so a stop loses nothing
+        print(f"{model}: {rep['attacks']} attacks ({set_name}); worked {rep['worked']}; harmless blocked {rep['harmless_blocked']} of {rep['harmless_total']}; saved to {out}")
 
 
 if __name__ == "__main__":
