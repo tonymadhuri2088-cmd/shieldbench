@@ -246,21 +246,40 @@ def _snip(s: str, n: int = 150) -> str:
     return s if len(s) <= n else s[:n] + "..."
 
 
-def run(bot, guard, attacks=None, controls=None, defences=DEFENCES, judge_ask=None, progress=None, limit: int = 0) -> dict:
+def run(bot, guard, attacks=None, controls=None, defences=DEFENCES, judge_ask=None, progress=None, limit: int = 0, cache_path=None) -> dict:
     attacks = list(attacks if attacks is not None else build_attacks())
     controls = list(controls if controls is not None else build_controls())
     if limit:
         attacks = sorted(random.Random(3).sample(attacks, min(limit, len(attacks))), key=lambda x: x.id)     # a fair spread of channels, goals and ways of hiding
     cache: dict[str, str] = {}
     calls = [0]
+    cp = Path(cache_path) if cache_path else None
+    if cp:
+        cp.parent.mkdir(parents=True, exist_ok=True)
+    if cp and cp.exists():                                   # resume: replies already got are not asked again (temperature 0, so they are the same)
+        try:
+            cache.update(json.loads(cp.read_text(encoding="utf-8")))
+        except Exception:
+            pass
 
     def ask_bot(system_extra, document, question):
         m = build_messages(question, document)
         m[0] = {"role": "system", "content": m[0]["content"] + system_extra}
         key = hashlib.sha256(json.dumps(m, sort_keys=True).encode()).hexdigest()
         if key not in cache:
-            cache[key] = bot.generate(m).text
+            for attempt in range(5):                        # a busy model server can answer HTTP 500 once; wait and ask again
+                try:
+                    cache[key] = bot.generate(m).text
+                    break
+                except RuntimeError:
+                    if attempt == 4:
+                        if cp:
+                            cp.write_text(json.dumps(cache), encoding="utf-8")
+                        raise
+                    time.sleep(5 * (attempt + 1))
             calls[0] += 1
+            if cp and calls[0] % 10 == 0:
+                cp.write_text(json.dumps(cache), encoding="utf-8")
         return cache[key]
 
     t0, rows = time.time(), []
@@ -406,7 +425,7 @@ def main(argv=None, bot=None, judge_ask=None, guard=None):
     bad = [d for d in dfs if d not in DEFENCES]
     if bad:
         raise SystemExit(f"unknown defence {bad}; choose from {DEFENCES}")
-    rep = run(bot, guard, defences=dfs, judge_ask=judge_ask, limit=a.limit, progress=lambda i, n: print(f"\r{i}/{n} attacks", end="", flush=True))
+    rep = run(bot, guard, defences=dfs, judge_ask=judge_ask, limit=a.limit, cache_path=Path(a.out).with_name('ix_cache_' + re.sub(r'[^A-Za-z0-9_.-]', '_', a.model or 'bot') + '.json'), progress=lambda i, n: print(f"\r{i}/{n} attacks", end="", flush=True))
     print()
     rows = rep.pop("_rows")
     if a.label_sheet:

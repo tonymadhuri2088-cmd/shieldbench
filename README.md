@@ -408,3 +408,11 @@ python -m shieldbench.export_site                             (puts the table on
 | Truthfulness (hallucination proxy) | TruthfulQA (Apache 2.0) | 60 | two-choice true vs common false belief |
 
 Limits: the guards are built for prompt injection, not for harmful topics; harmful compliance uses refusal phrases; TruthfulQA is two-choice, not free text; jailbreak prompts are capped at 4,000 characters; samples are small.
+
+
+## Submission documents
+
+The hackathon submission write-up (what was built, the tech stack, diagrams, results, limits and the rubric mapping) is in `submission/`:
+
+- `submission/ShieldBench_Submission.pdf` (and the editable `.docx`)
+- `submission/ShieldBench_Talk_Scripts.docx` (5-minute and 2-minute talk scripts, slide outline, Q&A)
