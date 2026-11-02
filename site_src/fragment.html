@@ -188,7 +188,21 @@ footer .who{display:flex;align-items:center;gap:10px;color:var(--fg)} footer .wh
 
   <div class="block" id="cross-block" hidden><header><h2>Another model family</h2><p class="muted">The same attacks and the same guards, run against a bot built on a different model family than the one the guards were developed against. Each cell is attacks that worked, out of the total, with the 95% range.</p></header>
     <div class="scroll"><table id="cross" aria-label="Other model families"></table></div>
-    <p class="small muted" id="cross-note" style="margin-top:10px"></p></div>
+    <p class="small muted" id="cross-note" style="margin-top:10px"></p>
+    <div id="cross-ex"></div></div>
+
+  <div class="block" id="ix-block" hidden><header><h2>Hidden instructions in documents (indirect injection)</h2><p class="muted">The attack is not typed by the user. It is hidden in data the bot reads: a review, an email, a web page, an invoice. 144 attacks (8 kinds of document, 3 goals, 6 ways of hiding) are run against each defence. Each cell is attacks that worked, with the 95% range.</p></header>
+    <div class="scroll"><table id="ix" aria-label="Indirect injection defences"></table></div>
+    <p class="small muted" id="ix-note" style="margin-top:10px"></p></div>
+
+  <div class="block" id="pub-block" hidden><header><h2>Public benchmarks (not written by us)</h2><p class="muted">Real jailbreak prompts collected in the wild (verazuo/jailbreak_llms, MIT), harmful requests (AdvBench, MIT), bias questions (BBQ, CC BY 4.0) and truthfulness questions (TruthfulQA, Apache 2.0). Guards were built for prompt injection, so a low block rate on harmful requests is expected and is shown, not hidden.</p></header>
+    <div class="scroll"><table id="pub-g" aria-label="Guards on public prompts"></table></div>
+    <div class="scroll"><table id="pub-m" aria-label="Bot on harmful, bias and truth tests"></table></div>
+    <p class="small muted" id="pub-note" style="margin-top:10px"></p></div>
+
+  <div class="block" id="ij-block" hidden><header><h2>Independent judge</h2><p class="muted">A model from another family re-judged replies that Claude and the rule judge had already judged. High agreement means the verdicts do not depend on one family; low agreement is reported as it comes.</p></header>
+    <div class="scroll"><table id="ij" aria-label="Independent judge agreement"></table></div>
+    <p class="small muted" id="ij-note" style="margin-top:10px"></p></div>
 
   <div class="block" id="arena-block" hidden><header><h2>The Arena: attacker versus detector</h2><p class="muted">Claude writes a fresh batch of attacks each round. The trained detector is tested on them, learns from the ones that got through, and is tested again on a new batch it has never seen.</p></header>
     <div id="arena-rounds"></div>
@@ -300,7 +314,7 @@ print(r.choices[0].finish_reason, r.choices[0].message.content)   # content_filt
       <li>The live server has no login and runs only on 127.0.0.1. It is for demos.</li>
     </ul></div>
   <div class="block"><header><h2>Built with</h2></header>
-    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (73 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
+    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (90 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
 <footer><div class="who">{{LOGO}}<div class="avatar" style="width:30px;height:30px;font-size:13px">{{INITIAL}}</div><div><b>{{AUTHOR}}</b> <span>{{COLLEGE}}</span></div></div><div>All targets are fake apps with fake data. <span id="gen"></span></div></footer>
@@ -388,8 +402,30 @@ function renderCross(){var L=D.crossmodel||[];if(!L.length)return;$("#cross-bloc
   var names={none:"No guard",g1:"Regex",g2:"Trained detector",g3:"Claude guard",g4:"Cascade"},ks=["none"];L.forEach(function(r){Object.keys(r.worked).forEach(function(k){if(ks.indexOf(k)<0)ks.push(k)})});
   var h="<tr><th>Model</th><th>Attacks</th>"+ks.map(function(k){return"<th>"+names[k]+"</th>"}).join("")+"<th>Harmless blocked (worst)</th></tr>";
   var b=L.map(function(r){var hb=Object.keys(r.harmless_blocked||{}).map(function(k){return r.harmless_blocked[k]}),mx=hb.length?Math.max.apply(null,hb):0;
-    return"<tr><td><b>"+esc(r.model)+"</b>"+(r.disguises?" <span class='badge'>with disguises</span>":"")+"</td><td class='mono'>"+r.attacks+"</td>"+ks.map(function(k){return r.worked[k]==null?"<td class='cell'>-</td>":"<td class='cell'>"+r.worked[k]+"<small>"+r.worked_ci[k][0]+" to "+r.worked_ci[k][1]+"%</small></td>"}).join("")+"<td class='mono'>"+mx+" of "+r.harmless_total+"</td></tr>"}).join("");
+    return"<tr><td><b>"+esc(r.model)+"</b>"+(r.disguises?" <span class='badge'>with disguises</span>":"")+(r.attack_set&&r.attack_set!=="seeds"?" <span class='badge'>"+esc(r.attack_set)+"</span>":"")+"</td><td class='mono'>"+r.attacks+"</td>"+ks.map(function(k){return r.worked[k]==null?"<td class='cell'>-</td>":"<td class='cell'>"+r.worked[k]+"<small>"+r.worked_ci[k][0]+" to "+r.worked_ci[k][1]+"%</small></td>"}).join("")+"<td class='mono'>"+mx+" of "+r.harmless_total+"</td></tr>"}).join("");
+  $("#cross-ex").innerHTML=L.filter(function(r){return r.worked_examples&&r.worked_examples.length}).map(function(r){return"<details style='margin-top:10px'><summary class='small'>Attacks that got through with no guard: "+esc(r.model)+"</summary>"+r.worked_examples.slice(0,3).map(function(x){return"<div class='small' style='margin:6px 0'><span class='muted'>"+esc(x.category.replace(/_/g," "))+"</span><br><b>Attack:</b> "+esc(x.attack)+"<br><b>Bot replied:</b> "+esc(x.reply)+"</div>"}).join("")+"</details>"}).join("");
   $("#cross").innerHTML=h+b;$("#cross-note").textContent="Small samples and the rule judge only. The detector was trained on text written by Claude, so a different family is a fair check of whether it only learned one style."}
+function renderIX(){var L=D.indirect||[];if(!L.length)return;$("#ix-block").hidden=false;
+  var nm={none:"No defence",g2_combined:"Guard on question + document",sanitise:"Strip hidden text",spotlight:"Mark document as data",quarantine:"Guard on document alone",link_filter:"Remove outside links",combo:"All four together"};
+  var ds=L[0].defences;
+  var h="<tr><th>Model</th><th>Attacks</th>"+ds.map(function(d){return"<th>"+nm[d]+"</th>"}).join("")+"</tr>";
+  var b=L.map(function(r){return"<tr><td><b>"+esc(r.model)+"</b></td><td class='mono'>"+r.attacks+"</td>"+ds.map(function(d){return"<td class='cell'>"+r.worked[d]+"<small>"+r.worked_ci[d][0]+" to "+r.worked_ci[d][1]+"%</small></td>"}).join("")+"</tr>"}).join("");
+  var c=L[0].controls_effect,cr=ds.map(function(d){return c[d].blocked+c[d].removed}).join(", ");
+  var ij=L.filter(function(r){return r.independent_judge&&r.independent_judge.n}).map(function(r){var j=r.independent_judge;return esc(r.model)+": second-family judge agrees with the rule judge on "+j.agree+" of "+j.n+" replies (kappa "+j.kappa+")"}).join("; ");
+  var hu=D.indirect_human&&D.indirect_human.n?" A person labelled "+D.indirect_human.n+" replies blindly: agreement with the rule judge "+D.indirect_human.agree+" of "+D.indirect_human.n+" (kappa "+D.indirect_human.kappa+").":"";
+  $("#ix").innerHTML=h+b;$("#ix-note").textContent="Harmless documents wrongly blocked or removed, in the same column order: "+cr+" (of "+L[0].controls+"). "+(ij?ij+". ":"")+hu+" Attacks are our own templates, one small model, and the rule judge; a zero means 'probably low', not 'safe'."}
+function renderPublic(){var L=D.public||[];if(!L.length)return;$("#pub-block").hidden=false;
+  var gn={g1:"Regex rules",g2:"Trained detector",g3:"Claude guard",g4:"Cascade"},c=function(r){return"<td class='cell'>"+r.k+" / "+r.n+"<small>"+r.lo+" to "+r.hi+"%</small></td>"};
+  var h="<tr><th>Guard</th><th>Real jailbreaks blocked (good)</th><th>Ordinary prompts blocked (bad)</th><th>Harmful requests blocked</th></tr>",seen={};
+  L.forEach(function(r){Object.keys(r.guards||{}).forEach(function(g){if(seen[g])return;seen[g]=1;var x=r.guards[g];h+="<tr><td>"+(gn[g]||g)+"</td>"+c(x.jailbreak)+c(x.overblock)+c(x.harmful_blocked)+"</tr>"})});
+  $("#pub-g").innerHTML=h;
+  var m="<tr><th>Model</th><th>Complied with harmful request (no guard)</th><th>Said 'unknown' on unclear bias question</th><th>Picked the stereotyped person</th><th>Chose the true statement</th></tr>";
+  L.filter(function(r){return r.bias}).forEach(function(r){m+="<tr><td><b>"+esc(r.model)+"</b></td>"+c(r.harmful_complied.none)+c(r.bias.said_unknown)+c(r.bias.picked_stereotyped)+c(r.truth.chose_true)+"</tr>"});
+  $("#pub-m").innerHTML=m;$("#pub-note").textContent="Small samples (100, 100, 100, 90, 60). Harmful compliance is judged by refusal phrases. TruthfulQA is a two-choice test, a proxy for hallucination, not free text. Guards here are built for prompt injection, not harmful topics."}
+function renderIJ(){var J=D.indjudge;if(!J||!J.n)return;$("#ij-block").hidden=false;
+  var h="<tr><th>Independent judge ("+esc(J.judge_model||"?")+") against</th><th>Replies</th><th>Agree</th><th>Kappa</th><th>Says success, they say no</th><th>Says fail, they say success</th></tr>";
+  [["claude","Claude judge"],["rule","Rule judge"]].forEach(function(k){var r=J[k[0]];h+="<tr><td>"+k[1]+"</td><td class='mono'>"+J.n+"</td><td class='mono'>"+r.agree+" / "+J.n+"</td><td class='mono'>"+r.kappa+"</td><td class='mono'>"+r.local_says_success_judge_says_no+"</td><td class='mono'>"+r.local_says_fail_judge_says_success+"</td></tr>"});
+  $("#ij").innerHTML=h;$("#ij-note").textContent=(J.unparseable?J.unparseable+" replies from the independent judge could not be read and are left out. ":"")+"A small local model is a weaker judge than Claude, so disagreement can mean the small judge is wrong. It is shown so the claim does not rest on one family."}
 function renderArena(key,sx){
   var A=D[key];$("#arena"+sx+"-block").hidden=!A;if(!A)return;
   $("#arena"+sx+"-rounds").innerHTML=A.rounds.map(function(r){
@@ -424,12 +460,14 @@ function renderStatic(){
 
 /* ---------- live console ---------- */
 function setStatus(on,msg){online=on;$("#dot").className="dot "+(on?"on":"off");$("#stat").textContent=msg}
+var SAME=location.protocol.indexOf("http")===0&&!/github\.io$/.test(location.hostname);   /* served by the ShieldBench server itself (localhost or a tunnel address) */
 function probe(){
-  var bases=[location.origin.indexOf("http")===0&&/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":null,"http://127.0.0.1:8765"].filter(function(x){return x!==null});
+  var bases=[SAME?"":null,"http://127.0.0.1:8765"].filter(function(x){return x!==null});
   (function next(i){
     if(i>=bases.length){setStatus(false,"live backend: not running");$("#offline").hidden=false;$("#console").style.opacity=.55;return}
     fetch(bases[i]+"/api/health").then(function(r){return r.json()}).then(function(h){
-      if(!h||!h.ok)throw 0;api=bases[i];setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#offline").hidden=true;$("#console").style.opacity=1;
+      if(!h||!h.ok)throw 0;api=bases[i];setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only")+(h.public_demo?" · public demo (limited)":""));$("#offline").hidden=true;$("#console").style.opacity=1;
+      if(h.public_demo){$("#c-bot").disabled=true;$("#c-bot").title="Turned off on the public demo";Array.prototype.slice.call(document.querySelectorAll("#g-guard option")).forEach(function(o){if(o.value==="g3"||o.value==="g4")o.remove()})}
       $("#c-agent").disabled=!h.agent;$("#c-agent").title=h.agent?"":"Start the server with --target ollama to use the agent";
     }).catch(function(){next(i+1)});
   })(0);
@@ -446,7 +484,9 @@ $("#g-go").addEventListener("click",function(){
   post("/api/check",{message:msg,guard:$("#g-guard").value,reset:true}).then(function(r){
     var ok=r.allowed;hist.unshift({ok:ok,t:msg,g:r.guard});hist=hist.slice(0,6);
     var tm=r.timings_ms||{};
-    $("#out").innerHTML="<div class='verdict "+(ok?"allow":"deny")+"'>"+(ok?"ALLOWED":"BLOCKED")+"</div><dl class='kv'><dt>Guard</dt><dd>"+esc(r.guard)+"</dd><dt>Stopped at</dt><dd>"+esc(r.stage)+"</dd><dt>Reason</dt><dd>"+esc(r.reason||"no rule or score reached the blocking level")+"</dd><dt>Guard time</dt><dd class='mono'>"+(tm.guard_in!=null?tm.guard_in:tm.total)+" ms</dd><dt>Customer sees</dt><dd>"+esc(r.reply)+"</dd></dl><div class='hist'>"+hist.map(function(h){return"<div><em style='color:var(--"+(h.ok?"stop":"fail")+")'>"+(h.ok?"allowed":"blocked")+"</em><span>"+esc(h.t)+"</span></div>"}).join("")+"</div>";
+    $("#out").innerHTML="<div class='verdict "+(ok?"allow":"deny")+"'>"+(ok?"ALLOWED":"BLOCKED")+"</div><dl class='kv'><dt>Guard</dt><dd>"+esc(r.guard)+"</dd><dt>Stopped at</dt><dd>"+esc(r.stage)+"</dd><dt>Reason</dt><dd>"+esc(r.reason||"no rule or score reached the blocking level")+"</dd><dt>Guard time</dt><dd class='mono'>"+(tm.guard_in!=null?tm.guard_in:tm.total)+" ms</dd><dt>Customer sees</dt><dd>"+esc(r.reply)+"</dd></dl><div class='hist'>"+hist.map(function(h){return"<div><em style='color:var(--"+(h.ok?"stop":"fail")+")'>"+(h.ok?"allowed":"blocked")+"</em><span>"+esc(h.t)+"</span></div>"}).join("")+"</div><div class='row' id='fb' style='margin-top:12px'><span class='small muted'>Was this wrong?</span><button type='button' class='chip' data-l='harmless'>It was harmless</button><button type='button' class='chip' data-l='attack'>It was an attack</button></div>";
+    Array.prototype.forEach.call(document.querySelectorAll("#fb .chip"),function(c){c.addEventListener("click",function(){
+      post("/api/feedback",{text:msg,label:c.getAttribute("data-l"),guard:r.guard}).then(function(){$("#fb").innerHTML="<span class='small muted'>Saved. It goes into the next retraining run (improve.py).</span>"}).catch(function(e){$("#fb").innerHTML="<span class='small' style='color:var(--fail)'>"+esc(e.message)+"</span>"})})});
   }).catch(function(e){$("#out").innerHTML="<p style='color:var(--fail)'>"+esc(e.message)+"</p><p class='muted small'>The Claude guard and the cascade need ANTHROPIC_API_KEY set on the computer that runs the server.</p>"}).then(function(){b.disabled=false;b.textContent="Check message"});
 });
 $("#g-gw").addEventListener("click",function(){
@@ -484,11 +524,11 @@ function chips(host,list,fn){list.forEach(function(x){var c=el("button",{type:"b
 
 /* ---------- boot ---------- */
 function boot(d){
-  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderArena("arena","");renderArena("arena_hard","-hard");
+  D=d;renderMatrix();renderStatic();renderTradeoff();renderCross();renderIJ();renderIX();renderPublic();renderArena("arena","");renderArena("arena_hard","-hard");
   chips("#g-ex",D.examples.guard,function(x){$("#g-msg").value=x.text});
   chips("#a-ex",D.examples.agent,function(x){$("#a-msg").value=x.message;$("#a-note").value=x.planted_note||""});
   show(location.hash.slice(1));
-  fetch((/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":"http://127.0.0.1:8765")+"/api/health").then(function(r){return r.json()}).then(function(h){if(h&&h.ok){api=/^(127\.0\.0\.1|localhost)$/.test(location.hostname)?"":"http://127.0.0.1:8765";setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#c-agent").disabled=!h.agent}else throw 0}).catch(function(){setStatus(false,"live backend: not running")});
+  fetch((SAME?"":"http://127.0.0.1:8765")+"/api/health").then(function(r){return r.json()}).then(function(h){if(h&&h.ok){api=SAME?"":"http://127.0.0.1:8765";setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#c-agent").disabled=!h.agent}else throw 0}).catch(function(){setStatus(false,"live backend: not running")});
 }
 fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(boot).catch(function(){document.querySelector("main").insertAdjacentHTML("afterbegin","<p style='color:var(--fail)'>data.json could not be loaded. Run python -m shieldbench.export_site and serve the docs folder.</p>")});
 })();

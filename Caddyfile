@@ -1,0 +1,3 @@
+guard.example.com {
+	reverse_proxy shieldbench:8765
+}

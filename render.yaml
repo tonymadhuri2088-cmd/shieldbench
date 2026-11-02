@@ -1,0 +1,12 @@
+# Render Blueprint: a public, limited ShieldBench demo (guard only, no API credit used).
+# Steps: push this branch to GitHub, then on render.com choose New > Blueprint, pick the repo and this branch.
+services:
+  - type: web
+    name: shieldbench-demo
+    runtime: docker
+    plan: free
+    branch: v2-service
+    healthCheckPath: /api/health
+    envVars:
+      - key: SHIELDBENCH_PUBLIC_DEMO
+        value: "1"

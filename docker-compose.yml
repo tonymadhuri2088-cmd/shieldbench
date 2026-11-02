@@ -1,0 +1,24 @@
+# ShieldBench behind HTTPS.  Usage (on a server with Docker and a domain pointing at it):
+#   1. Edit Caddyfile: replace guard.example.com with your domain.
+#   2. export SHIELDBENCH_KEYS='{"alice":"<long random>","bob":"<long random>"}'   (or SHIELDBENCH_KEY=<one key>)
+#   3. docker compose up -d
+# Not yet run by the author: untested on a real server.
+services:
+  shieldbench:
+    build: .
+    restart: unless-stopped
+    environment:
+      - SHIELDBENCH_KEY
+      - SHIELDBENCH_KEYS
+    volumes:
+      - ./results:/app/results      # keeps feedback.jsonl and the cache outside the container
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [shieldbench]
+volumes:
+  caddy_data:

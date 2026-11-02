@@ -107,7 +107,7 @@ def build(results: Path, out: Path, examples=True) -> dict:
                 refreshed.append("agent")
         except Exception:
             pass
-    data = dict(meta=dict(generated=time.strftime("%Y-%m-%d %H:%M"), refreshed=refreshed, tests=73, owasp="4 of 10",
+    data = dict(meta=dict(generated=time.strftime("%Y-%m-%d %H:%M"), refreshed=refreshed, tests=90, owasp="4 of 10",
                           version=_version()), guards=[dict(key=k, name=n) for k, n in GUARDS], sets=sets, agent=agent,
                 adaptive=ADAPTIVE, xstest=XSTEST, crescendo=CRESCENDO, latency=LATENCY)
     for key in ("arena", "arena_hard"):
@@ -123,9 +123,33 @@ def build(results: Path, out: Path, examples=True) -> dict:
     f = results / "crossmodel.json"
     if f.exists():
         try:
-            data["crossmodel"] = [{k: r[k] for k in ("model", "attacks", "worked", "worked_ci", "harmless_total", "harmless_blocked", "disguises", "scored_extraction", "guards") if k in r}
+            data["crossmodel"] = [{k: r[k] for k in ("model", "attacks", "worked", "worked_ci", "harmless_total", "harmless_blocked", "disguises", "scored_extraction", "guards", "attack_set", "worked_examples") if k in r}
                                   for r in json.loads(f.read_text(encoding="utf-8"))]
             data["meta"]["refreshed"].append("crossmodel")
+        except Exception:
+            pass
+    f = results / "independent_judge.json"
+    if f.exists():
+        try:
+            data["indjudge"] = json.loads(f.read_text(encoding="utf-8"))
+            data["meta"]["refreshed"].append("indjudge")
+        except Exception:
+            pass
+    f = results / "indirect.json"
+    if f.exists():
+        try:
+            data["indirect"] = json.loads(f.read_text(encoding="utf-8"))
+            data["meta"]["refreshed"].append("indirect")
+            h = results / "indirect_human.json"
+            if h.exists():
+                data["indirect_human"] = json.loads(h.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    f = results / "public.json"
+    if f.exists():
+        try:
+            data["public"] = json.loads(f.read_text(encoding="utf-8"))
+            data["meta"]["refreshed"].append("public")
         except Exception:
             pass
     if examples:
