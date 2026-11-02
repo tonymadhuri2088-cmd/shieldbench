@@ -305,7 +305,7 @@ print(r.choices[0].finish_reason, r.choices[0].message.content)   # content_filt
       <li>The live server has no login and runs only on 127.0.0.1. It is for demos.</li>
     </ul></div>
   <div class="block"><header><h2>Built with</h2></header>
-    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (85 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
+    <p>Python, Ollama, the Anthropic API (Claude Haiku as guard and attacker, Claude Sonnet as judge), scikit-learn, SQLite cache with a spending cap, pytest (86 tests), GitHub Actions with a pass/fail gate, and this page.</p></div>
 </section>
 
 <footer><div class="who">{{LOGO}}<div class="avatar" style="width:30px;height:30px;font-size:13px">{{INITIAL}}</div><div><b>{{AUTHOR}}</b> <span>{{COLLEGE}}</span></div></div><div>All targets are fake apps with fake data. <span id="gen"></span></div></footer>
@@ -440,7 +440,8 @@ function probe(){
   (function next(i){
     if(i>=bases.length){setStatus(false,"live backend: not running");$("#offline").hidden=false;$("#console").style.opacity=.55;return}
     fetch(bases[i]+"/api/health").then(function(r){return r.json()}).then(function(h){
-      if(!h||!h.ok)throw 0;api=bases[i];setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only"));$("#offline").hidden=true;$("#console").style.opacity=1;
+      if(!h||!h.ok)throw 0;api=bases[i];setStatus(true,"live backend: connected"+(h.bot&&h.bot!=="none"?" · bot "+h.bot:" · guard only")+(h.public_demo?" · public demo (limited)":""));$("#offline").hidden=true;$("#console").style.opacity=1;
+      if(h.public_demo){$("#c-bot").disabled=true;$("#c-bot").title="Turned off on the public demo";Array.prototype.slice.call(document.querySelectorAll("#g-guard option")).forEach(function(o){if(o.value==="g3"||o.value==="g4")o.remove()})}
       $("#c-agent").disabled=!h.agent;$("#c-agent").title=h.agent?"":"Start the server with --target ollama to use the agent";
     }).catch(function(){next(i+1)});
   })(0);

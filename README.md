@@ -347,3 +347,17 @@ Four answers to "does it only work against Claude's way of thinking?":
 **Second human labeller:** this already existed. `python -m shieldbench.judge.label xlsx` makes a sheet for a friend; `fromxlsx` reads it back; `kappa --a mine.csv --b friend.csv` reports human-vs-human agreement and each judge against the humans.
 
 Not done: nothing here has been run against a real Ollama model yet (tests use fakes); no second human has labelled; the larger-model judge needs a larger model than a 2B on your hardware.
+
+## v0.42: a public cloud demo (limited, no API credit)
+
+`--public-demo` (or the environment variable `SHIELDBENCH_PUBLIC_DEMO=1`) lets the server listen on a public address **without an API key**, by turning off everything that could cost money or reach other machines:
+
+- no `/api/scan` (it would make the server send requests to any address a visitor types), no `/api/agent`, no Claude guards (g3, g4: they cost API credit), no attached bot;
+- request bodies over 20 KB are refused; each visitor address is limited to 30 requests a minute (the first `X-Forwarded-For` entry behind a proxy); the feedback file stops growing at 1 MB;
+- the web page notices this (`public_demo` in `/api/health`), removes g3/g4 from the guard list and disables "Test your own bot".
+
+It does not combine with `--target`. The Dockerfile now listens on `$PORT` (cloud hosts set it) or 8765.
+
+**Deploy on Render (free):** `render.yaml` is a Blueprint for the `v2-service` branch. On render.com: New, Blueprint, pick your GitHub repo and the branch, deploy. The address Render gives serves the whole site and a working Live tab for the regex and trained-detector guards.
+
+Limits: not run on a real Render account by the author; free instances sleep after about 15 minutes idle and take up to a minute to wake; memory is small; visitors share one server; no database, nothing is kept after a restart.

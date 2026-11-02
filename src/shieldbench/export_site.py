@@ -107,7 +107,7 @@ def build(results: Path, out: Path, examples=True) -> dict:
                 refreshed.append("agent")
         except Exception:
             pass
-    data = dict(meta=dict(generated=time.strftime("%Y-%m-%d %H:%M"), refreshed=refreshed, tests=85, owasp="4 of 10",
+    data = dict(meta=dict(generated=time.strftime("%Y-%m-%d %H:%M"), refreshed=refreshed, tests=86, owasp="4 of 10",
                           version=_version()), guards=[dict(key=k, name=n) for k, n in GUARDS], sets=sets, agent=agent,
                 adaptive=ADAPTIVE, xstest=XSTEST, crescendo=CRESCENDO, latency=LATENCY)
     for key in ("arena", "arena_hard"):
