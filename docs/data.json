@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-11-01 23:45",
+  "generated": "2026-11-02 09:26",
   "refreshed": [
    "main",
    "qwen",
@@ -889,6 +889,74 @@
     "g2": [
      0.0,
      3.0
+    ]
+   },
+   "harmless_total": 22,
+   "harmless_blocked": {
+    "g1": 0,
+    "g2": 3
+   },
+   "disguises": true,
+   "scored_extraction": true,
+   "guards": {
+    "g1": "g1_regex",
+    "g2": "g2_detector"
+   }
+  },
+  {
+   "model": "llama3.2:3b",
+   "attacks": 124,
+   "worked": {
+    "none": 23,
+    "g1": 6,
+    "g2": 0
+   },
+   "worked_ci": {
+    "none": [
+     12.7,
+     26.3
+    ],
+    "g1": [
+     2.2,
+     10.2
+    ],
+    "g2": [
+     0.0,
+     3.0
+    ]
+   },
+   "harmless_total": 22,
+   "harmless_blocked": {
+    "g1": 0,
+    "g2": 3
+   },
+   "disguises": true,
+   "scored_extraction": true,
+   "guards": {
+    "g1": "g1_regex",
+    "g2": "g2_detector"
+   }
+  },
+  {
+   "model": "qwen2.5:3b",
+   "attacks": 121,
+   "worked": {
+    "none": 56,
+    "g1": 18,
+    "g2": 0
+   },
+   "worked_ci": {
+    "none": [
+     37.6,
+     55.1
+    ],
+    "g1": [
+     9.6,
+     22.3
+    ],
+    "g2": [
+     0.0,
+     3.1
     ]
    },
    "harmless_total": 22,
